@@ -17,7 +17,7 @@ To install dependencies, follow the instructions at https://github.com/hacobe/la
 * tar -xvzf azcopy_linux_amd64_10.16.1.tar.gz
 * azcopy_linux_amd64_10.16.1/azcopy copy "https://openaipublic.blob.core.windows.net/summarize-from-feedback/dataset/*" . --recursive
 * azcopy_linux_amd64_10.16.1/azcopy copy "https://openaipublic.blob.core.windows.net/summarize-from-feedback/datasets/tldr_3_filtered/*" . --recursive
-* Move the data_dir specified in config.yaml
+* Move the data into the data_dir specified in config.yaml
 * Run: python prepare_refs_dataset.py
 * Run: python prepare_comparisons_dataset.py
 
