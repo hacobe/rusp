@@ -46,13 +46,18 @@ def _get_refs_config(config, component, params_str):
 		checkpoint_dir = _get_checkpoint_dir(config, prefix, model)
 		return ml_collections.ConfigDict({
 			"input_file": os.path.join(config["data_dir"], "refs_test.jsonl"),
-			"model_dir": model_dir,
+			"model_dir": checkpoint_dir,
 			"output_file": os.path.join(checkpoint_dir, "predictions_refs_test.jsonl"),
 			"num_beams": 1,
 			"num_return_sequences": 1,
 			"max_num_tokens": 48,
 			"top_k": 50,
-			"cache_dir": config["cache_dir"]
+			"cache_dir": config["cache_dir"],
+			"include_input_data": True,
+			"exclude_input_keys": "",
+			"limit": -1,
+			"start": 0,
+			"temperature": 1.0
 		})
 	elif component == "evaluate":
 		checkpoint_dir = _get_checkpoint_dir(config, prefix, model)
