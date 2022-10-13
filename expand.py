@@ -16,11 +16,12 @@ if __name__ == "__main__":
 
 	outputs = []
 	for template in templates:
-		var_list = []
+		var_set = set()
 		for _, v, _, _ in string.Formatter().parse(template):
 			if v is None:
 				continue
-			var_list.append(v)
+			var_set.add(v)
+		var_list = sorted(list(var_set))
 
 		if not var_list:
 			outputs.append(template)
@@ -29,6 +30,7 @@ if __name__ == "__main__":
 		values_list = []
 		for var in var_list:
 			values_list.append(var_to_values[var])
+
 		for prod in itertools.product(*values_list):
 			prod_dict = {}
 			for i, value in enumerate(prod):
@@ -37,4 +39,3 @@ if __name__ == "__main__":
 			outputs.append(output)
 
 	print(" ".join(outputs))
-
