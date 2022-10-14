@@ -1,15 +1,6 @@
-# aug_qe
+# summ_aug
 
-This is a research directory.
-
-## Dependencies
-
-To install dependencies, follow the instructions at https://github.com/hacobe/language_models
-
-## Configuration
-
-* Set the paths in config.yaml
-* Set the environment variables in run.sh
+Experiments related to data augmentation for language reward models for summarization.
 
 ## TL;DR datasets
 

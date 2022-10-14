@@ -1,5 +1,7 @@
 # selective_asr
 
+Experiments related to selective prediction for Automatic Speech Recognition (ASR).
+
 ```
 sbatch --partition=jsteinhardt -w balrog --gres=gpu:1 run.sh \
     $(python expand.py \
