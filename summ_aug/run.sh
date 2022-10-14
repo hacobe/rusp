@@ -1,5 +1,5 @@
 #!/bin/bash
-export AUGQE_DIR="/accounts/projects/jsteinhardt/$USER/src/rusp/summ_aug"
+export CONFIG_DIR="/accounts/projects/jsteinhardt/$USER/src/rusp/summ_aug"
 export LM_DIR="/accounts/projects/jsteinhardt/$USER/src/language_models"
 export CONDA_ENV_PREFIX="/scratch/users/$USER/conda/common"
 
@@ -11,5 +11,5 @@ for EXPERIMENT in "$@"
 do
 	echo $EXPERIMENT
 	python $LM_DIR/language_models.py \
-		--config=$AUGQE_DIR/config.py:$EXPERIMENT
+		--config=$CONFIG_DIR/config.py:$EXPERIMENT
 done
