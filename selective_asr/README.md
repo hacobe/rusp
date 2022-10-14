@@ -1,7 +1,7 @@
 # selective_asr
 
 ```
-sbatch --partition=jsteinhardt -w balrog --gres=gpu:1 selective_asr.sh \
+sbatch --partition=jsteinhardt -w balrog --gres=gpu:1 run.sh \
     $(python expand.py \
         huggingface_generate:{d}_beamSearch20 \
         huggingface_generate:{d}_ancestralSampling20_topp{p}_seed0 \
