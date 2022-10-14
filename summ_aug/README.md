@@ -18,7 +18,7 @@ The documentation for the datasets is available at https://github.com/openai/sum
 
 ```
 sbatch --partition=jsteinhardt -w balrog --gres=gpu:1 run.sh \
-	$(python expand.py \
+	$(python ../expand.py \
 		huggingface_finetune:refs_{m} \
 		huggingface_generate:refs_{m} \
 		evaluate:refs_{m} \

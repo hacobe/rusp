@@ -4,7 +4,7 @@ Experiments related to selective prediction for Automatic Speech Recognition (AS
 
 ```
 sbatch --partition=jsteinhardt -w balrog --gres=gpu:1 run.sh \
-    $(python expand.py \
+    $(python ../expand.py \
         huggingface_generate:{d}_beamSearch20 \
         huggingface_generate:{d}_ancestralSampling20_topp{p}_seed0 \
         huggingface_generate:{d}_ancestralSampling20_topp{p}_seed1 \
