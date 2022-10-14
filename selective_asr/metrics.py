@@ -82,14 +82,6 @@ def _calc_importance_weighted_entropy(predictions):
 
 
 def compute(examples):
-	wers = []
-	method_to_scores = {
-		"mean_samp_wers": [],
-		"neg_mean_token_logprobs": [],
-		"neg_sum_token_logprobs": [],
-		"hypo_entropy": [],
-		"samp_entropy": []
-	}
 	for i in range(len(examples)):
 		beam_search_span = (-1, -1)
 		for key in examples[i]["api_response"]:
@@ -112,32 +104,37 @@ def compute(examples):
 		index_best = 0
 		prediction_best = hypotheses[index_best]
 
-		# True WER
-		wer = _calc_wer(reference, prediction_best["text"])
-		wers.append(wer)
+		example_metrics = {}
 
-		method_to_scores["neg_mean_token_logprobs"].append(-1 * np.mean(prediction_best["token_logprobs"]))
-		method_to_scores["neg_sum_token_logprobs"].append(-1 * sum(prediction_best["token_logprobs"]))
+		# True WER
+		example_metrics["wer"] = _calc_wer(reference, prediction_best["text"])
+
+		example_metrics["scores"] = {}
+		example_metrics["scores"]["neg_mean_token_logprobs"] = -1 * np.mean(prediction_best["token_logprobs"])
+		example_metrics["scores"]["neg_sum_token_logprobs"] = -1 * sum(prediction_best["token_logprobs"])
 
 		# Average word error rate between hypothesis and samples
 		samp_wers = []
 		for j in range(len(samples)):
 			samp_wers.append(_calc_wer(samples[j]["text"], prediction_best["text"])) 
-		method_to_scores["mean_samp_wers"].append(np.mean(samp_wers))
+		example_metrics["scores"]["mean_samp_wers"] = np.mean(samp_wers)
 
 		# Entropy from importance weighting hypotheses
-		method_to_scores["hypo_entropy"].append(_calc_importance_weighted_entropy(hypotheses))
+		example_metrics["scores"]["hypo_entropy"] = _calc_importance_weighted_entropy(hypotheses)
 
 		# Entropy from samples
-		method_to_scores["samp_entropy"].append(_calc_importance_weighted_entropy(samples))
+		example_metrics["scores"]["samp_entropy"] = _calc_importance_weighted_entropy(samples)
 
+		examples[i]["metrics"] = example_metrics
+
+	wers = np.array([x["metrics"]["wer"] for x in examples])
 	metrics = {
 		"mean_wer": np.mean(wers),
 	}
-	for method in method_to_scores:
+	methods = sorted(list(examples[0]["metrics"]["scores"].keys()))
+	for method in methods:
 		key = "prr_" + method
-		assert key not in metrics
-		metrics[key] = _calc_prr(
-			scores=method_to_scores[method], wers=wers)
+		scores = np.array([x["metrics"]["scores"][method] for x in examples])
+		metrics[key] = _calc_prr(scores=scores, wers=wers)
 
 	return metrics
