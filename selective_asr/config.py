@@ -5,7 +5,7 @@ import yaml
 
 
 def _get_predictions_file(config, params_str):
-	return os.path.join(config["results_dir"], "predictions_" + params_str.replace("*", "X") + ".jsonl")
+	return os.path.join(config["results_dir"], "predictions_" + params_str + ".jsonl")
 
 def _get_metrics_file(config, params_str):
 	predictions_file = _get_predictions_file(config, params_str)
@@ -71,13 +71,13 @@ def get_config(experiment):
 				"sampling_rate": 16000,
 				"top_k": -1,
 				"top_p": params.get("topp", 1.0),
-				"seed": 0,
+				"seed": params.get("seed", 0),
 				**decoding_strategy_to_generate_args[params["decoding_strategy"]]})
 	elif component == "merge_files_generate":
 		input_files = []
 		for part in params_str.split("+"):
 			input_files.extend(glob.glob(_get_predictions_file(config, part)))
-		output_file = _get_predictions_file(config, params_str)
+		output_file = _get_predictions_file(config, params_str.replace("*", "X"))
 		return ml_collections.ConfigDict({
 			"input_files": ",".join(input_files),
 			"output_file": output_file})
