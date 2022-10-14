@@ -15,7 +15,7 @@ python prepare_wmt_dataset.py
 ```
 sbatch --partition=jsteinhardt -w sunstone --gres=gpu:1 run.sh \
     $(python ../expand.py \
-        huggingface_generate:{d}_beamSearch20 \
+        huggingface_generate:{d}_beamSearch \
         huggingface_generate:{d}_ancestralSampling_topp{p}_seed0 \
         huggingface_generate:{d}_ancestralSampling_topp{p}_seed1 \
         huggingface_generate:{d}_ancestralSampling_topp{p}_seed2 \
