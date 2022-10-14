@@ -4,7 +4,7 @@ import ml_collections
 import yaml
 
 
-ASR_DATASETS = ["librispeechclean" , "librispeechother" , "tedlium"]
+ASR_DATASETS = ["librispeech", "librispeechclean" , "librispeechother" , "tedlium"]
 TRANSLATION_DATASETS = ["wmt"]
 
 
@@ -37,9 +37,26 @@ def get_config(experiment):
 					if ch.isdigit():
 						end = i
 						break
-				params["decoding_strategy"] = param_str[:end]
-				if end != -1:
-					params["num_return_sequences"] = int(param_str[end:])
+
+				num_return_sequences = -1
+				if end == -1:
+					params["decoding_strategy"] = param_str
+					if params["decoding_strategy"] == "ancestralSampling":
+						num_return_sequences = 20
+					elif params["decoding_strategy"] == "beamSearch":
+						if params["data"] in TRANSLATION_DATASETS:
+							num_return_sequences = 5
+						else:
+							num_return_sequences = 20
+					else:
+						raise ValueError(
+							"Unrecognized decoding_strategy: <" + params["decoding_strategy"] + ">")
+				else:
+					params["decoding_strategy"] = param_str[:end]
+					num_return_sequences = int(param_str[end:])
+				assert num_return_sequences != -1
+				params["num_return_sequences"] = num_return_sequences
+
 			elif param_str.startswith("topp"):
 				params["topp"] = float(param_str.replace("topp", ""))
 			elif param_str.startswith("seed"):
@@ -48,28 +65,20 @@ def get_config(experiment):
 				params["data"] = param_str
 			elif param_str in ("train", "validation", "test"):
 				params["split"] = param_str
+			elif param_str == "features":
+				params["include_features"] = True
 			else:
 				raise ValueError("Unrecognized params: <" + param_str + ">")
 
-		if params["decoding_strategy"] == "ancestralSampling":
-			default_num_return_sequences = 20
-		elif params["decoding_strategy"] == "beamSearch":
-			if params["data"] in TRANSLATION_DATASETS:
-				default_num_return_sequences = 5
-			else:
-				default_num_return_sequences = 20
-		num_return_sequences = params.get(
-			"num_return_sequences", default_num_return_sequences)
-
 		decoding_strategy_to_generate_args = {
 			"beamSearch": {
-				"num_beams": num_return_sequences,
-				"num_return_sequences": num_return_sequences,
+				"num_beams": params["num_return_sequences"],
+				"num_return_sequences": params["num_return_sequences"],
 				"do_sample": False
 			},
 			"ancestralSampling": {
 				"num_beams": 1,
-				"num_return_sequences": num_return_sequences,
+				"num_return_sequences": params["num_return_sequences"],
 				"do_sample": True
 			},
 		}
@@ -115,6 +124,7 @@ def get_config(experiment):
 				"top_k": -1,
 				"top_p": params.get("topp", 1.0),
 				"seed": params.get("seed", 0),
+				"include_features": params.get("include_features", False),
 				**decoding_strategy_to_generate_args[params["decoding_strategy"]]})
 	elif component == "merge_files_generate":
 		input_files = []
