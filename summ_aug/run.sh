@@ -1,5 +1,5 @@
 #!/bin/bash
-export AUGQE_DIR="/accounts/projects/jsteinhardt/$USER/src/aug_qe"
+export AUGQE_DIR="/accounts/projects/jsteinhardt/$USER/src/rusp/summ_aug"
 export LM_DIR="/accounts/projects/jsteinhardt/$USER/src/language_models"
 export CONDA_ENV_PREFIX="/scratch/users/$USER/conda/common"
 
