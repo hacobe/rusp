@@ -112,7 +112,6 @@ def _calc_importance_weighted_entropy(predictions):
 
 def compute(examples):
 	for i in tqdm.tqdm(range(len(examples))):
-		"""
 		beam_search_span = (-1, -1)
 		for key in examples[i]["api_response"]:
 			if key.find("beamSearch") != -1:
@@ -122,8 +121,6 @@ def compute(examples):
 				assert isinstance(beam_search_span[0], int)
 				assert isinstance(beam_search_span[1], int)
 		assert beam_search_span != (-1, -1)
-		"""
-		beam_search_span = (0, 2)
 		start, end = beam_search_span
 		hypotheses = examples[i]["predictions"][start:end]
 		samples = examples[i]["predictions"][end:]
