@@ -15,14 +15,14 @@ python prepare_wmt_dataset.py
 ```
 sbatch --partition=jsteinhardt -w sunstone --gres=gpu:1 run.sh \
     $(python ../expand.py \
-        huggingface_generate:{d}_beamSearch \
-        huggingface_generate:{d}_ancestralSampling_topp{p}_seed0 \
-        huggingface_generate:{d}_ancestralSampling_topp{p}_seed1 \
-        huggingface_generate:{d}_ancestralSampling_topp{p}_seed2 \
-        huggingface_generate:{d}_ancestralSampling_topp{p}_seed3 \
-        huggingface_generate:{d}_ancestralSampling_topp{p}_seed4 \
-        merge_files_generate:{d}_beamSearch+{d}_ancestralSampling_topp{p}_seed* \
-        evaluate:{d}_beamSearch+{d}_ancestralSampling_topp{p}_seedX \
-        --d=tedlium,librispeechclean_test,librispeechother_test,wmt_test \
+        huggingface_generate:{d}_beamSearch_features \
+        huggingface_generate:{d}_ancestralSampling_topp{p}_features_seed0 \
+        huggingface_generate:{d}_ancestralSampling_topp{p}_features_seed1 \
+        huggingface_generate:{d}_ancestralSampling_topp{p}_features_seed2 \
+        huggingface_generate:{d}_ancestralSampling_topp{p}_features_seed3 \
+        huggingface_generate:{d}_ancestralSampling_topp{p}_features_seed4 \
+        merge_files_generate:{d}_beamSearch_features+{d}_ancestralSampling_topp{p}_features_seed* \
+        evaluate:{d}_beamSearch_features+{d}_ancestralSampling_topp{p}_features_seedX \
+        --d=librispeech_train,librispeech_validation,tedlium,librispeechclean_test,librispeechother_test,wmt_test \
         --p=1.0,0.9)
 ```
