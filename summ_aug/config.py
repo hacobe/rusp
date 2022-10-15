@@ -28,8 +28,8 @@ def _get_refs_config(config, component, params_str):
 	if component == "huggingface_finetune":
 		output_dir = _get_model_dir(config, params_str)
 
-		if not os.path.exists(output_dir):
-			os.makedirs(output_dir)
+		assert not os.path.exists(output_dir)
+		os.makedirs(output_dir)
 
 		return ml_collections.ConfigDict({
 			"pretrained_model_name_or_path": model,
@@ -90,7 +90,12 @@ def _parse_comparisons_params_str(params_str):
 	for param_str in params_str.replace("comparisons_", "").split("_"):
 		if param_str in MODELS:
 			params["model"] = param_str
-		elif param_str in ("base", "sup2"):
+		elif param_str in (
+			"base",
+			"sup2vsup2",
+			"refvsup2",
+			"sup2vsup2+refvsup2",
+			"refvsup2policy"):
 			params["data"] = param_str
 		elif param_str in ("train", "valid", "test"):
 			params["split"] = param_str
@@ -111,8 +116,8 @@ def _get_comparisons_config(config, component, params_str):
 	if component == "huggingface_finetune":
 		output_dir = _get_model_dir(config, train_params_str)
 
-		if not os.path.exists(output_dir):
-			os.makedirs(output_dir)
+		assert not os.path.exists(output_dir)
+		os.makedirs(output_dir)
 
 		train_data_file = os.path.join(
 			config["data_dir"], _get_comparisons_filename(config, train_params))
