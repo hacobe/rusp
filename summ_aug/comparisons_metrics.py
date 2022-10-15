@@ -20,20 +20,17 @@ def compute(examples, checkpoint_dir=None, cache_dir=None):
 
 	data_collator = lm.finetune._DataCollatorForMultipleChoice(tokenizer)
 
-	new_examples = []
-	y_prob = []
-	y_pred = []
-	y_true = []
-	i = 0
-	for line in tqdm.tqdm(examples):
-		example = lm.utils.build_example_for_multiple_choice(
-			line["prompt"],
-			line["completion0"],
-			line["completion1"],
-			line["choice"],
+	for i in tqdm.tqdm(range(len(examples))):
+		example = examples[i]
+
+		multiple_choice_example = lm.utils.build_example_for_multiple_choice(
+			example["prompt"],
+			example["completion0"],
+			example["completion1"],
+			example["choice"],
 			tokenizer)
 
-		batch = data_collator([example])
+		batch = data_collator([multiple_choice_example])
 
 		with torch.no_grad():
 			input_ids = torch.tensor(batch["input_ids"]).cuda()
@@ -45,22 +42,12 @@ def compute(examples, checkpoint_dir=None, cache_dir=None):
 		prob = probs[0, 1].tolist()
 		prediction = torch.argmax(probs).tolist()
 
-		new_example = {}
-		new_example["example"] = line
-		new_example["prob"] = prob
-		new_example["prediction"] = prediction
-		new_example["choice"] = line["choice"]
-		new_examples.append(new_example)
+		examples[i]["prob"] = prob
+		examples[i]["prediction"] = prediction
 
-		y_prob.append(prob)
-		y_pred.append(prediction)
-		y_true.append(line["choice"])
-
-		i += 1
-
-	y_prob = np.array(y_prob)
-	y_pred = np.array(y_pred)
-	y_true = np.array(y_true)
+	y_prob = np.array([x["prob"] for x in examples])
+	y_pred = np.array([x["prediction"] for x in examples])
+	y_true = np.array([x["choice"] for x in examples])
 
 	metrics = {
 		"auc": sklearn.metrics.roc_auc_score(y_true, y_prob),

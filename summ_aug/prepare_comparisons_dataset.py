@@ -59,7 +59,7 @@ if __name__ == "__main__":
 
 	for split in split_to_examples:
 		print(split + ": " + str(len(split_to_examples[split])))
-		output_file = os.path.join(output_dir, "comparisons_" + split + ".jsonl")
+		output_file = os.path.join(output_dir, "comparisons_base_" + split + ".jsonl")
 		with jsonlines.open(output_file, "w") as fout:
 			fout.write_all(split_to_examples[split])
 

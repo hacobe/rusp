@@ -11,6 +11,7 @@ Experiments related to data augmentation for language reward models for summariz
 * Move the data into the data_dir specified in config.yaml
 * Run: python prepare_refs_dataset.py
 * Run: python prepare_comparisons_dataset.py
+* Run: python prepare_derived_comparisons_datasets.py
 
 The documentation for the datasets is available at https://github.com/openai/summarize-from-feedback
 
@@ -22,7 +23,7 @@ sbatch --partition=jsteinhardt -w balrog --gres=gpu:1 run.sh \
 		huggingface_finetune:refs_{m} \
 		huggingface_generate:refs_{m} \
 		evaluate:refs_{m} \
-		huggingface_finetune:comparisons_{m} \
-		evaluate:comparisons_{m} \
+		huggingface_finetune:comparisons_base_train_{m} \
+		evaluate:comparisons_base_train_{m}#base_test \
 		--m=gpt2,gpt2-medium,gpt2-large,gpt2-xl)
 ```

@@ -3,22 +3,30 @@ import os
 import yaml
 
 
-def _get_model_dir(config, prefix, model):
-	assert model in ("gpt2", "gpt2-medium", "gpt2-large", "gpt2-xl")
-	return os.path.join(config["models_dir"], prefix + "_" + model)
+MODELS = ["gpt2", "gpt2-medium", "gpt2-large", "gpt2-xl"]
 
 
-def _get_checkpoint_dir(config, prefix, model):
-	model_dir = _get_model_dir(config, prefix, model)
+def _get_model_dir(config, params_str):
+	return os.path.join(config["models_dir"], params_str)
+
+
+def _get_checkpoint_dir(config, params_str):
+	model_dir = _get_model_dir(config, params_str)
 	return os.path.join(model_dir, "final_checkpoint")
 
 
 def _get_refs_config(config, component, params_str):
-	prefix = "refs"
-	model = params_str.replace("refs_", "")
+	# `params_str` has to have the format "refs_<model>"
+	# in order for the reward model fine-tuning on
+	# comparisons to know where to find the summarization
+	# model to use at initialization.
+	parts = params_str.split("_")
+	assert parts[0] == "refs_"
+	model = parts[1]
+	assert model in MODELS
 
 	if component == "huggingface_finetune":
-		output_dir = _get_model_dir(config, prefix, model)
+		output_dir = _get_model_dir(config, params_str)
 
 		if not os.path.exists(output_dir):
 			os.makedirs(output_dir)
@@ -70,23 +78,54 @@ def _get_refs_config(config, component, params_str):
 		raise ValueError("Unrecognized component")
 
 
+def _get_comparisons_filename(config, params):
+	return "comparisons_{0}_{1}.jsonl".format(params["data"], params["split"])
+
+
+def _parse_comparisons_params_str(params_str):
+	params = {}
+	if not params_str:
+		return params
+
+	for param_str in params_str.replace("comparisons_", "").split("_"):
+		if param_str in MODELS:
+			params["model"] = param_str
+		elif param_str in ("base", "sup2"):
+			params["data"] = param_str
+		elif param_str in ("train", "valid", "test"):
+			params["split"] = param_str
+		else:
+			raise ValueError("Unrecognized params: <" + param_str + ">")
+	return params
+
+
 def _get_comparisons_config(config, component, params_str):
-	prefix = "comparisons"
-	model = params_str.replace("comparisons_", "")
+	assert params_str.startswith("comparisons_")
+	parts = params_str.split("#")
+	assert len(parts) == 1 or len(parts) == 2
+	train_params_str = parts[0]
+	eval_params_str = "" if len(parts) == 1 else parts[1]
+	train_params = _parse_comparisons_params_str(train_params_str)
+	eval_params = _parse_comparisons_params_str(eval_params_str)
 
 	if component == "huggingface_finetune":
-		output_dir = _get_model_dir(config, prefix, model)
+		output_dir = _get_model_dir(config, train_params_str)
 
 		if not os.path.exists(output_dir):
 			os.makedirs(output_dir)
 
+		train_data_file = os.path.join(
+			config["data_dir"], _get_comparisons_filename(config, train_params))
+		pretrained_model_name_or_path = _get_checkpoint_dir(
+			config, "refs_" + train_params["model"])
+
 		return ml_collections.ConfigDict({
-			"pretrained_model_name_or_path": _get_checkpoint_dir(config, "refs", model),
+			"pretrained_model_name_or_path": pretrained_model_name_or_path,
 			"model_classname": "GPT2DoubleHeadsModel",
 			"tokenizer_classname": "GPT2Tokenizer",
 			"task": "MultipleChoice",
 			"cache_dir": config["cache_dir"],
-			"train_data_file": os.path.join(config["data_dir"], "comparisons_train.jsonl"),
+			"train_data_file": train_data_file,
 			"output_dir": output_dir,
 			"seed": 0,
 			"per_device_train_batch_size": 1,
@@ -102,14 +141,23 @@ def _get_comparisons_config(config, component, params_str):
 			"report_to": "none"
 		})
 	elif component == "evaluate":
-		checkpoint_dir = _get_checkpoint_dir(config, prefix, model)
+		input_file = os.path.join(config["data_dir"], _get_comparisons_filename(config, eval_params))
+		checkpoint_dir = _get_checkpoint_dir(config, train_params_str)
+
+		base_filename = _get_comparisons_filename(config, eval_params)
+		output_file = os.path.join(checkpoint_dir,
+			base_filename.replace("comparisons_", "metrics_").replace(".jsonl", ".txt"))
+		evaluated_examples_file = os.path.join(checkpoint_dir,
+			base_filename.replace("comparisons_", "evaluated_examples_"))
+
 		return ml_collections.ConfigDict({
-			"input_file": os.path.join(config["data_dir"], "comparisons_test.jsonl"),
+			"input_file": input_file,
 			"metric_file": "comparisons_metrics.py",
-			"output_file": os.path.join(checkpoint_dir, "metrics.txt"),
+			"output_file": output_file,
+			"evaluated_examples_file": evaluated_examples_file,
 			"checkpoint_dir": checkpoint_dir,
 			"cache_dir": config["cache_dir"]
-		})	
+		})
 	else:
 		raise ValueError("Unrecognized component")
 
