@@ -1,6 +1,9 @@
+import collections
 import jsonlines
 import os
+import nltk
 import numpy as np
+import string
 import tqdm
 import yaml
 
@@ -112,6 +115,226 @@ def replace_choice(examples, better_than_policy_pairs):
 	return new_examples
 
 
+def segment(summary, word_punct_tokenizer):
+	if len(summary) >= 1:
+		assert summary[0] not in (" ", "\n", "\r", "\t")
+		assert summary[-1] not in (" ", "\n", "\r", "\t")
+
+	token_spans = [span for span in word_punct_tokenizer.span_tokenize(summary)]
+	sent_spans = []
+	last = 0
+	num_nonpunc_tokens = 0
+	for start, end in token_spans:
+		token = summary[start:end]
+
+		is_punc = False
+		for punc in [".", "?", "!", ",", ";"]:
+			if token.startswith(punc):
+				is_punc = True
+				break
+
+		if not is_punc:
+			num_nonpunc_tokens += 1
+
+		if (is_punc and num_nonpunc_tokens >= 4):
+			sent_spans.append((last, end))
+			last = end
+			num_nonpunc_tokens = 0
+	if len(summary) - last > 0:
+		if len(sent_spans) != 0 and num_nonpunc_tokens < 4:
+			sent_spans[-1] = (sent_spans[-1][0], len(summary))
+		else:
+			sent_spans.append((last, len(summary)))
+
+	summary_parts = [summary[s[0]:s[1]] for s in sent_spans]
+	assert "".join(summary_parts) == summary
+
+	return sent_spans
+
+
+def corrupt_ref_by_dup(ref, word_punct_tokenizer):
+	summary = ref.strip()
+
+	sent_spans = segment(summary, word_punct_tokenizer)
+
+	if len(sent_spans) == 1:
+		return None
+
+	index = np.random.randint(0, len(sent_spans))
+
+	prefix_end = sent_spans[index][0]
+	suffix_start = sent_spans[index][1]
+	if index + 1 < len(sent_spans):
+		suffix_end = sent_spans[index+1][1]
+	else:
+		suffix_end = len(summary)
+
+	prefix = summary[:prefix_end].strip()
+	middle = summary[prefix_end:suffix_start].strip()
+	suffix = summary[suffix_start:suffix_end].strip()
+
+	new_summary = ""
+	new_summary += prefix
+	n_reps = 0
+	while len(new_summary) + len(suffix) + len(middle) + 1 <= len(summary):
+		m = [ch for ch in middle]
+		if new_summary.endswith(",") or new_summary.endswith(";"):
+			if (len(m) >= 2) and (m[0:2] in ("I", "I'")):
+				m[0] = m[0] # do nothing
+			elif m[0] == m[0].upper():
+				m[0] = m[0].lower()
+
+		if new_summary != "":
+			new_summary += " "
+
+		new_summary += "".join(m)
+		n_reps += 1
+
+		if n_reps == 2:
+			break
+
+	if n_reps == 1:
+		return None
+
+	new_summary = new_summary.strip()
+	if suffix != "":
+		new_summary += " "
+	new_summary += suffix
+
+	j = index + 1
+	while (j < len(sent_spans)) and (len(new_summary) + sent_spans[j][1] - sent_spans[j][0] + 1 <= len(summary)):
+		start, end = sent_spans[j]
+		part = summary[start:end]
+		if part != "":
+			new_summary += " "
+		new_summary += part
+		j += 1
+
+	if new_summary.endswith(",") or new_summary.endswith(";"):
+		new_summary = new_summary[:-1]
+
+	return new_summary
+
+
+def count_num_tokens(text, word_punct_tokenizer):
+	token_spans = [span for span in word_punct_tokenizer.span_tokenize(text)]
+	num_nonpunc_tokens = 0
+	num_punc_tokens = 0
+	for token_start, token_end in token_spans:
+		token = text[token_start:token_end]
+		is_punc = False
+		for punc in string.punctuation:
+			if token.startswith(punc):
+				is_punc = True
+				break
+		if is_punc:
+			num_punc_tokens += 1
+		else:
+			num_nonpunc_tokens += 1
+	return {"num_punc_tokens": num_punc_tokens, "num_nonpunc_tokens": num_nonpunc_tokens}
+
+
+def corrupt_ref_by_drop(ref, word_punct_tokenizer):
+	summary = ref.strip()
+
+	sent_spans = segment(summary, word_punct_tokenizer)
+
+	if len(sent_spans) == 1:
+		return None
+
+	summary_parts = [summary[s[0]:s[1]] for s in sent_spans]
+	assert "".join(summary_parts) == summary
+
+	num_nonpunc_tokens_in_sent_spans = []
+	for start, end in sent_spans:
+		summary_part = summary[start:end]
+		num_nonpunc_tokens = count_num_tokens(
+			summary_part, word_punct_tokenizer)["num_nonpunc_tokens"]
+		num_nonpunc_tokens_in_sent_spans.append(num_nonpunc_tokens)
+
+	eligible_indices = []
+	for j, num_nonpunc_tokens in enumerate(num_nonpunc_tokens_in_sent_spans):
+		if num_nonpunc_tokens >= 5:
+			eligible_indices.append(j)
+
+	if len(eligible_indices) <= 1:
+		return None
+
+	index = np.random.randint(0, len(eligible_indices))
+
+	included_summary_parts = []
+	prev_part = ""
+	for j in range(len(summary_parts)):
+		if j == eligible_indices[index]:
+			continue
+		part = summary_parts[j].strip()
+		if (prev_part != "") and (prev_part[-1] in (",", ";")) and (part != "") and (
+			part[0] == part[0].upper()) and (part[0:2] not in ("I ")) and (j - 1 == eligible_indices[index]):
+			part = part[0].lower() + part[1:]
+		included_summary_parts.append(part)
+		prev_part = part
+
+	new_summary = " ".join(included_summary_parts).strip()
+	if new_summary.endswith(",") or new_summary.endswith(";"):
+		new_summary = new_summary[:-1]
+
+	return new_summary
+
+
+def add_corrupt_ref_dataset(
+	prompt_to_refs,
+	dataset_map,
+	dataset_name,
+	corrupt_fn,
+	disallowed_prompts,
+	limit=None):
+	assert dataset_name.startswith("refv")
+	corrupt_policy_name = dataset_name.replace("refv", "")
+
+	word_punct_tokenizer = nltk.tokenize.WordPunctTokenizer()
+
+	examples = []
+	for prompt in tqdm.tqdm(prompt_to_refs):
+		refs = list(prompt_to_refs[prompt])
+		# sort so that longest completion is first.
+		refs.sort(key=lambda x: -len(x))
+		ref = refs[0]
+
+		corrupt_ref = corrupt_fn(ref, word_punct_tokenizer)
+
+		if not corrupt_ref:
+			continue
+
+		completion0 = " " + ref.strip()
+		completion1 = " " + corrupt_ref.strip()
+		policy0 = "ref"
+		policy1 = corrupt_policy_name
+		choice = 0
+
+		r = np.random.random()
+		if r <= 0.5:
+			completion0, completion1 = completion1, completion0
+			policy0, policy1 = policy1, policy0
+			choice = 1 - choice
+
+		example = {
+			"prompt": prompt,
+			"completion0": completion0,
+			"completion1": completion1,
+			"policy0": policy0,
+			"policy1": policy1,
+			"choice": choice
+		}
+		examples.append(example)
+
+	np.random.shuffle(examples)
+
+	if limit is None:
+		limit = len(examples)
+
+	dataset_map[dataset_name + "_train"] = examples[:limit]
+
+
 if __name__ == "__main__":
 	np.random.seed(0)
 
@@ -119,6 +342,11 @@ if __name__ == "__main__":
 		config = yaml.load(fin, Loader=yaml.FullLoader)
 
 	base_dataset = read_base_dataset(config)
+
+	prompt_to_refs = collections.defaultdict(set)
+	with jsonlines.open(os.path.join(config["data_dir"], "refs_train.jsonl"), "r") as fin:
+		for line in tqdm.tqdm(fin):
+			prompt_to_refs[line["prompt"]].add(line["summary"])
 
 	dataset_map = {}
 
@@ -149,5 +377,32 @@ if __name__ == "__main__":
 		dataset_map["refvsup2_train"],
 		better_than_policy_pairs=set([("ref", "sup2")]))
 
-	write(config, dataset_map, dataset_names=["refvsup2policy_train"])
+	add_policy_comp_dataset(
+		examples=base_dataset,
+		dataset_map=dataset_map,
+		dataset_name="refvsup1",
+		allowed_policy_comps=set([("ref", "sup1")]),
+		should_split=False,
+		disallowed_prompts=sup2vsup2_test_prompts)
+
+	dataset_map["refvsup1policy_train"] = replace_choice(
+		dataset_map["refvsup1_train"],
+		better_than_policy_pairs=set([("ref", "sup1")]))
+
+	add_corrupt_ref_dataset(
+		prompt_to_refs=prompt_to_refs,
+		dataset_map=dataset_map,
+		dataset_name="refvdup",
+		corrupt_fn=corrupt_ref_by_dup,
+		disallowed_prompts=sup2vsup2_test_prompts)
+
+	add_corrupt_ref_dataset(
+		prompt_to_refs=prompt_to_refs,
+		dataset_map=dataset_map,
+		dataset_name="refvdrop",
+		corrupt_fn=corrupt_ref_by_drop,	
+		disallowed_prompts=sup2vsup2_test_prompts,
+		limit=8000)
+
+	write(config, dataset_map, dataset_names=["refvdup_train"])
 

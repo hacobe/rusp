@@ -95,7 +95,12 @@ def _parse_comparisons_params_str(params_str):
 			"sup2vsup2",
 			"refvsup2",
 			"sup2vsup2+refvsup2",
-			"refvsup2policy"):
+			"refvsup2policy",
+			"refvsup1",
+			"refvsup1policy",
+			"refvdup",
+			"refvdup8k",
+			"refvdrop"):
 			params["data"] = param_str
 		elif param_str in ("train", "valid", "test"):
 			params["split"] = param_str
@@ -116,7 +121,7 @@ def _get_comparisons_config(config, component, params_str):
 	if component == "huggingface_finetune":
 		output_dir = _get_model_dir(config, train_params_str)
 
-		assert not os.path.exists(output_dir)
+		assert not os.path.exists(output_dir), output_dir
 		os.makedirs(output_dir)
 
 		train_data_file = os.path.join(
