@@ -4,6 +4,7 @@ import os
 import nltk
 import numpy as np
 import string
+import transformers
 import tqdm
 import yaml
 
@@ -43,22 +44,41 @@ def write(config, dataset_map, dataset_names=None):
 			fout.write_all(dataset_map[dataset_name])
 
 
+def split_by_prompt(examples):
+	prompts = set()
+	for example in examples:
+		prompts.add(example["prompt"])
+
+	prompts_list = sorted(list(prompts))
+	np.random.shuffle(prompts_list)
+	n = len(prompts_list)
+	n_train = n // 2
+	train_prompts = set(prompts_list[:n_train])
+	train_examples = []
+	test_examples = []
+	for example in examples:
+		if example["prompt"] in train_prompts:
+			train_examples.append(example)
+		else:
+			test_examples.append(example)
+	np.random.shuffle(train_examples)
+	np.random.shuffle(test_examples)
+
+	return train_examples, test_examples
+
+
 def add_policy_comp_dataset(
 	examples,
 	dataset_map,
 	dataset_name,
 	allowed_policy_comps,
-	should_split,
-	disallowed_prompts=set()):
+	should_split):
 	filtered_examples = []
 	for example in examples:
 		comp = (example["policy0"], example["policy1"])
 		opp_comp = (example["policy1"], example["policy0"])
 
 		if (comp not in allowed_policy_comps) and (opp_comp not in allowed_policy_comps):
-			continue
-
-		if example["prompt"] in disallowed_prompts:
 			continue
 
 		filtered_examples.append(example)
@@ -69,24 +89,7 @@ def add_policy_comp_dataset(
 		dataset_map[dataset_name + "_train"] = filtered_examples
 		return
 
-	prompts = set()
-	for example in filtered_examples:
-		prompts.add(example["prompt"])
-
-	prompts_list = sorted(list(prompts))
-	np.random.shuffle(prompts_list)
-	n = len(prompts_list)
-	n_train = n // 2
-	train_prompts = set(prompts_list[:n_train])
-	train_examples = []
-	test_examples = []
-	for example in filtered_examples:
-		if example["prompt"] in train_prompts:
-			train_examples.append(example)
-		else:
-			test_examples.append(example)
-	np.random.shuffle(train_examples)
-	np.random.shuffle(test_examples)
+	train_examples, test_examples = split_by_prompt(filtered_examples)
 
 	dataset_map[dataset_name + "_train"] = train_examples
 	dataset_map[dataset_name + "_test"] = test_examples
@@ -282,11 +285,10 @@ def corrupt_ref_by_drop(ref, word_punct_tokenizer):
 
 
 def add_corrupt_ref_dataset(
-	prompt_to_refs,
+	prompt_to_ref_examples,
 	dataset_map,
 	dataset_name,
 	corrupt_fn,
-	disallowed_prompts,
 	limit=None):
 	assert dataset_name.startswith("refv")
 	corrupt_policy_name = dataset_name.replace("refv", "")
@@ -294,8 +296,9 @@ def add_corrupt_ref_dataset(
 	word_punct_tokenizer = nltk.tokenize.WordPunctTokenizer()
 
 	examples = []
-	for prompt in tqdm.tqdm(prompt_to_refs):
-		refs = list(prompt_to_refs[prompt])
+	for prompt in tqdm.tqdm(prompt_to_ref_examples):
+		ref_examples = prompt_to_ref_examples[prompt]
+		refs = [e["summary"] for e in ref_examples]
 		# sort so that longest completion is first.
 		refs.sort(key=lambda x: -len(x))
 		ref = refs[0]
@@ -335,6 +338,101 @@ def add_corrupt_ref_dataset(
 	dataset_map[dataset_name + "_train"] = examples[:limit]
 
 
+def write_masked_refs_dataset(config, prompt_to_ref_examples):
+	word_punct_tokenizer = nltk.tokenize.WordPunctTokenizer()
+	tokenizer = transformers.GPT2Tokenizer.from_pretrained("gpt2", cache_dir=config["cache_dir"])
+	tokenizer.pad_token = tokenizer.unk_token
+	tokenizer.add_special_tokens({"cls_token": "[CLS]"})
+
+	examples = []
+	prompts = set()
+	for prompt in tqdm.tqdm(prompt_to_ref_examples):
+		ref_examples = prompt_to_ref_examples[prompt]
+		# sort so that longest completion is first.
+		ref_examples.sort(key=lambda x: -len(x["summary"]))
+		ref_example = ref_examples[0]
+
+		if ref_example["prompt"] in prompts:
+			continue
+		prompts.add(ref_example["prompt"])
+
+		summary = ref_example["summary"].strip()
+
+		sent_spans = segment(summary, word_punct_tokenizer)
+
+		if len(sent_spans) == 1:
+			continue
+
+		summary_parts = [summary[s[0]:s[1]] for s in sent_spans]
+		assert "".join(summary_parts) == summary
+
+		num_nonpunc_tokens_in_sent_spans = []
+		for start, end in sent_spans:
+			summary_part = summary[start:end]
+			num_nonpunc_tokens = count_num_tokens(
+				summary_part, word_punct_tokenizer)["num_nonpunc_tokens"]
+			num_nonpunc_tokens_in_sent_spans.append(num_nonpunc_tokens)
+
+		eligible_indices = []
+		for j, num_nonpunc_tokens in enumerate(num_nonpunc_tokens_in_sent_spans):
+			if num_nonpunc_tokens >= 5:
+				eligible_indices.append(j)
+
+		if len(eligible_indices) <= 1:
+			continue
+
+		index = np.random.randint(0, len(eligible_indices))
+
+		included_summary_parts = []
+		mask_part = None
+		for j in range(len(summary_parts)):
+			summary_part = summary_parts[j].strip()
+			if j == eligible_indices[index]:
+				summary_part_prefix = summary_part
+				summary_part_suffix = ""
+				if len(summary_part) > 0 and summary_part[-1] in string.punctuation:
+					start = len(summary_part) - 1
+					for k in range(len(summary_part)-1, -1, -1):
+						if summary_part[k] not in string.punctuation:
+							start = k + 1
+							break
+					summary_part_prefix = summary_part[:start]
+					summary_part_suffix = summary_part[start:]
+
+				summary_part_prefix_tokens = tokenizer.encode(summary_part_prefix)
+				summary_part_suffix_tokens = tokenizer.encode(summary_part_suffix)
+				mask_tokens = ["[CLS]"] * len(summary_part_prefix_tokens)
+				mask_part = " ".join(mask_tokens) + summary_part_suffix
+				new_summary_part = mask_part 
+			else:
+				new_summary_part = summary_part
+			included_summary_parts.append(new_summary_part)
+		assert mask_part is not None
+
+		new_summary = " ".join(included_summary_parts).strip()
+		new_prompt = "SUBREDDIT: r/" + ref_example["subreddit"].strip() + "\n" + new_summary + "\nTL;DR:"
+
+		example = {}
+		example["prompt"] = new_prompt
+		example["completion"] = " " + summary + "<|endoftext|>"
+		example["example"] = ref_example
+		examples.append(example)
+
+	np.random.shuffle(examples)
+
+	train_examples, test_examples = split_by_prompt(examples)
+
+	output_file = os.path.join(config["data_dir"], "refs_masked_train.jsonl")
+	print(output_file + ": " + str(len(train_examples)))
+	with jsonlines.open(output_file, "w") as fout:
+		fout.write_all(train_examples)
+
+	output_file = os.path.join(config["data_dir"], "refs_masked_test.jsonl")
+	print(output_file + ": " + str(len(test_examples)))
+	with jsonlines.open(output_file, "w") as fout:
+		fout.write_all(test_examples)
+
+
 if __name__ == "__main__":
 	np.random.seed(0)
 
@@ -342,11 +440,6 @@ if __name__ == "__main__":
 		config = yaml.load(fin, Loader=yaml.FullLoader)
 
 	base_dataset = read_base_dataset(config)
-
-	prompt_to_refs = collections.defaultdict(set)
-	with jsonlines.open(os.path.join(config["data_dir"], "refs_train.jsonl"), "r") as fin:
-		for line in tqdm.tqdm(fin):
-			prompt_to_refs[line["prompt"]].add(line["summary"])
 
 	dataset_map = {}
 
@@ -361,13 +454,27 @@ if __name__ == "__main__":
 	for example in dataset_map["sup2vsup2_test"]:
 		sup2vsup2_test_prompts.add(example["prompt"])
 
+	filtered_base_dataset = []
+	for example in base_dataset:
+		if example["prompt"] in sup2vsup2_test_prompts:
+			continue
+		filtered_base_dataset.append(example)
+
+	filtered_prompt_to_ref_examples = collections.defaultdict(list)
+	with jsonlines.open(os.path.join(config["data_dir"], "refs_train.jsonl"), "r") as fin:
+		for example in tqdm.tqdm(fin):
+			if example["prompt"] in sup2vsup2_test_prompts:
+				continue
+			filtered_prompt_to_ref_examples[example["prompt"]].append(example)
+
+	write_masked_refs_dataset(config, filtered_prompt_to_ref_examples)
+
 	add_policy_comp_dataset(
-		examples=base_dataset,
+		examples=filtered_base_dataset,
 		dataset_map=dataset_map,
 		dataset_name="refvsup2",
 		allowed_policy_comps=set([("ref", "sup2")]),
-		should_split=False,
-		disallowed_prompts=sup2vsup2_test_prompts)
+		should_split=False)
 
 	dataset_map["sup2vsup2+refvsup2_train"] = (
 		dataset_map["sup2vsup2_train"] + dataset_map["refvsup2_train"])
@@ -378,31 +485,31 @@ if __name__ == "__main__":
 		better_than_policy_pairs=set([("ref", "sup2")]))
 
 	add_policy_comp_dataset(
-		examples=base_dataset,
+		examples=filtered_base_dataset,
 		dataset_map=dataset_map,
 		dataset_name="refvsup1",
 		allowed_policy_comps=set([("ref", "sup1")]),
-		should_split=False,
-		disallowed_prompts=sup2vsup2_test_prompts)
+		should_split=False)
 
 	dataset_map["refvsup1policy_train"] = replace_choice(
 		dataset_map["refvsup1_train"],
 		better_than_policy_pairs=set([("ref", "sup1")]))
 
 	add_corrupt_ref_dataset(
-		prompt_to_refs=prompt_to_refs,
+		prompt_to_ref_examples=filtered_prompt_to_ref_examples,
 		dataset_map=dataset_map,
 		dataset_name="refvdup",
-		corrupt_fn=corrupt_ref_by_dup,
-		disallowed_prompts=sup2vsup2_test_prompts)
+		corrupt_fn=corrupt_ref_by_dup)
+
+	dataset_map["refvdup8k_train"] = dataset_map["refvdup_train"][:8000]
 
 	add_corrupt_ref_dataset(
-		prompt_to_refs=prompt_to_refs,
+		prompt_to_ref_examples=filtered_prompt_to_ref_examples,
 		dataset_map=dataset_map,
 		dataset_name="refvdrop",
-		corrupt_fn=corrupt_ref_by_drop,	
-		disallowed_prompts=sup2vsup2_test_prompts,
-		limit=8000)
+		corrupt_fn=corrupt_ref_by_drop)
 
-	write(config, dataset_map, dataset_names=["refvdup_train"])
+	dataset_map["refvdrop8k_train"] = dataset_map["refvdrop_train"][:8000]
+
+	write(config, dataset_map, dataset_names=None)
 

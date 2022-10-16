@@ -100,7 +100,8 @@ def _parse_comparisons_params_str(params_str):
 			"refvsup1policy",
 			"refvdup",
 			"refvdup8k",
-			"refvdrop"):
+			"refvdrop",
+			"refvdrop8k"):
 			params["data"] = param_str
 		elif param_str in ("train", "valid", "test"):
 			params["split"] = param_str
