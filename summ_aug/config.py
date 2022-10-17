@@ -16,14 +16,26 @@ def _get_checkpoint_dir(config, params_str):
 
 
 def _get_refs_config(config, component, params_str):
-	# `params_str` has to have the format "refs_<model>"
+	# `params_str` has to have the format "refs_<data>_<model>"
 	# in order for the reward model fine-tuning on
 	# comparisons to know where to find the summarization
 	# model to use at initialization.
 	parts = params_str.split("_")
-	assert parts[0] == "refs_"
-	model = parts[1]
+	assert len(parts) == 3
+	assert parts[0] == "refs"
+	data = parts[1]
+	model = parts[2]
 	assert model in MODELS
+
+	if data == "base":
+		pretrained_model_name_or_path = model
+		task = "DecoderOnlySeq2Seq"
+	elif data == "masked":
+		pretrained_model_name_or_path = _get_checkpoint_dir(
+			config, "refs_base_" + model)
+		task = "DecoderOnlyMaskedSeq2Seq"
+	else:
+		raise ValueError("Unrecognized data <" + data + ">")
 
 	if component == "huggingface_finetune":
 		output_dir = _get_model_dir(config, params_str)
@@ -32,12 +44,12 @@ def _get_refs_config(config, component, params_str):
 		os.makedirs(output_dir)
 
 		return ml_collections.ConfigDict({
-			"pretrained_model_name_or_path": model,
+			"pretrained_model_name_or_path": pretrained_model_name_or_path,
 			"model_classname": "GPT2LMHeadModel",
 			"tokenizer_classname": "GPT2Tokenizer",
-			"task": "DecoderOnlySeq2Seq",
+			"task": task,
 			"cache_dir": config["cache_dir"],
-			"train_data_file": os.path.join(config["data_dir"], "refs_train.jsonl"),
+			"train_data_file": os.path.join(config["data_dir"], "refs_{0}_train.jsonl".format(data)),
 			"output_dir": output_dir,
 			"seed": 0,
 			"per_device_train_batch_size": 1,
@@ -51,11 +63,11 @@ def _get_refs_config(config, component, params_str):
 			"report_to": "none"
 		})
 	elif component == "huggingface_generate":
-		checkpoint_dir = _get_checkpoint_dir(config, prefix, model)
+		checkpoint_dir = _get_checkpoint_dir(config, params_str)
 		return ml_collections.ConfigDict({
-			"input_file": os.path.join(config["data_dir"], "refs_test.jsonl"),
+			"input_file": os.path.join(config["data_dir"], "refs_{0}_test.jsonl".format(data)),
 			"model_dir": checkpoint_dir,
-			"output_file": os.path.join(checkpoint_dir, "predictions_refs_test.jsonl"),
+			"output_file": os.path.join(checkpoint_dir, "predictions_refs_{0}_test.jsonl".format(data)),
 			"num_beams": 1,
 			"num_return_sequences": 1,
 			"max_num_tokens": 48,
@@ -68,9 +80,9 @@ def _get_refs_config(config, component, params_str):
 			"temperature": 1.0
 		})
 	elif component == "evaluate":
-		checkpoint_dir = _get_checkpoint_dir(config, prefix, model)
+		checkpoint_dir = _get_checkpoint_dir(config, params_str)
 		return ml_collections.ConfigDict({
-			"input_file": os.path.join(checkpoint_dir, "predictions_refs_test.jsonl"),
+			"input_file": os.path.join(checkpoint_dir, "predictions_refs_{0}_test.jsonl".format(data)),
 			"metric_file": "refs_metrics.py",
 			"output_file": os.path.join(checkpoint_dir, "metrics.txt"),
 		})	
@@ -128,7 +140,7 @@ def _get_comparisons_config(config, component, params_str):
 		train_data_file = os.path.join(
 			config["data_dir"], _get_comparisons_filename(config, train_params))
 		pretrained_model_name_or_path = _get_checkpoint_dir(
-			config, "refs_" + train_params["model"])
+			config, "refs_base_" + train_params["model"])
 
 		return ml_collections.ConfigDict({
 			"pretrained_model_name_or_path": pretrained_model_name_or_path,

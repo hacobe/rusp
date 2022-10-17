@@ -35,6 +35,6 @@ if __name__ == "__main__":
 				example["completion"] = " " + raw_example["summary"] + " <|endoftext|>"
 				examples.append(example)
 
-		output_file = os.path.join(output_dir, "refs_" + split + ".jsonl")
+		output_file = os.path.join(output_dir, "refs_base_" + split + ".jsonl")
 		with jsonlines.open(output_file, "w") as fout:
 			fout.write_all(examples)

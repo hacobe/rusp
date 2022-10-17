@@ -27,9 +27,9 @@ python prepare_derived_comparisons_datasets.py
 ```
 sbatch --partition=jsteinhardt -w balrog --gres=gpu:1 run.sh \
 	$(python ../expand.py \
-		huggingface_finetune:refs_{m} \
-		huggingface_generate:refs_{m} \
-		evaluate:refs_{m} \
+		huggingface_finetune:refs_base_{m} \
+		huggingface_generate:refs_base_{m} \
+		evaluate:refs_base_{m} \
 		huggingface_finetune:comparisons_{d}_train_{m} \
 		evaluate:comparisons_{d}_train_{m}#sup2vsup2_test \
 		--m=gpt2,gpt2-medium,gpt2-large,gpt2-xl \

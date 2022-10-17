@@ -461,7 +461,7 @@ if __name__ == "__main__":
 		filtered_base_dataset.append(example)
 
 	filtered_prompt_to_ref_examples = collections.defaultdict(list)
-	with jsonlines.open(os.path.join(config["data_dir"], "refs_train.jsonl"), "r") as fin:
+	with jsonlines.open(os.path.join(config["data_dir"], "refs_base_train.jsonl"), "r") as fin:
 		for example in tqdm.tqdm(fin):
 			if example["prompt"] in sup2vsup2_test_prompts:
 				continue
