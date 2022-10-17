@@ -19,7 +19,7 @@ Then run:
 ```
 python prepare_refs_dataset.py
 python prepare_comparisons_dataset.py
-python prepare_derived_comparisons_datasets.py
+python prepare_derived_datasets.py
 ```
 
 ## Experiments
@@ -27,9 +27,9 @@ python prepare_derived_comparisons_datasets.py
 ```
 sbatch --partition=jsteinhardt -w balrog --gres=gpu:1 run.sh \
 	$(python ../expand.py \
-		huggingface_finetune:refs_base_{m} \
-		huggingface_generate:refs_base_{m} \
-		evaluate:refs_base_{m} \
+		huggingface_finetune:refs_base_train_{m} \
+		huggingface_generate:refs_base_train_{m}#base_test \
+		evaluate:refs_base_train_{m}#base_test \
 		huggingface_finetune:comparisons_{d}_train_{m}_n{n} \
 		evaluate:comparisons_{d}_train_{m}_n{n}#sup2vsup2_test \
 		--m=gpt2,gpt2-medium,gpt2-large,gpt2-xl \
