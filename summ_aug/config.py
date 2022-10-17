@@ -16,8 +16,11 @@ def _get_checkpoint_dir(config, params_str):
 
 
 def _get_data_filename(params):
-	return "{0}_{1}_{2}.jsonl".format(
-		params["mode"], params["data"], params["split"])
+	filename = params["mode"] + "_" + params["data"]
+	if "split" in params:
+		filename += "_" + params["split"]
+	filename += ".jsonl"
+	return filename
 
 
 def _get_predictions_filename(params_str):
@@ -43,9 +46,13 @@ def _parse_params_str(params_str):
 			"refvsup1",
 			"refvsup1policy",
 			"refvdup",
-			"refvdrop"):
+			"refvdrop",
+			"excludesup2vsup2testprompts",
+			"refvgpt2",
+			"refvgpt2d0.3",
+			"gpt2vgpt2d0.3"):
 			params["data"] = param_str
-		elif param_str.startswith("n") and param_str[1].isdigit():
+		elif param_str[0] == "n" and param_str[1].isdigit():
 			num_str = "0"
 			suffix = ""
 			for i in range(1, len(param_str)):
@@ -65,6 +72,8 @@ def _parse_params_str(params_str):
 			else:
 				raise ValueError("Unrecognized suffix: <" + suffix + ">")
 			params["train_data_limit"] = num
+		elif param_str[0] == "d" and param_str[1].isdigit():
+			params["dropout_prob"] = float(param_str[1:])
 		elif param_str in ("train", "valid", "test"):
 			params["split"] = param_str
 		else:
@@ -169,6 +178,7 @@ def get_config(experiment):
 			"limit": -1,
 			"start": 0,
 			"temperature": 1.0,
+			"dropout_prob": generate_params.get("dropout_prob", 0.0),
 			"do_sample": False
 		})
 		return cfg
@@ -204,7 +214,9 @@ def get_config(experiment):
 				"output_file": os.path.join(checkpoint_dir,
 					filename.replace("comparisons_", "metrics_").replace(".jsonl", ".txt")),
 				"evaluated_examples_file": os.path.join(checkpoint_dir,
-					filename.replace("comparisons_", "evaluated_examples_"))
+					filename.replace("comparisons_", "evaluated_examples_")),
+				"checkpoint_dir": checkpoint_dir,
+				"cache_dir": config["cache_dir"]
 			})
 			return cfg
 	else:

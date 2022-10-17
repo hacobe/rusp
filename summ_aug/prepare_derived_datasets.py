@@ -4,7 +4,6 @@ import os
 import nltk
 import numpy as np
 import string
-import transformers
 import tqdm
 import yaml
 
@@ -338,6 +337,40 @@ def add_corrupt_ref_dataset(
 	dataset_map[dataset_name + "_train"] = examples[:limit]
 
 
+def write_refs_dataset(config, prompt_to_ref_examples, dataset_name, limit=None):
+	examples = []
+	prompts = set()
+	for prompt in tqdm.tqdm(prompt_to_ref_examples):
+		ref_examples = prompt_to_ref_examples[prompt]
+		# sort so that longest completion is first.
+		ref_examples.sort(key=lambda x: -len(x["summary"]))
+		ref_example = ref_examples[0]
+
+		if ref_example["prompt"] in prompts:
+			continue
+		prompts.add(ref_example["prompt"])
+
+		example = {}
+		example["prompt"] = ref_example["prompt"]
+		example["completion"] = " " + ref_example["summary"].strip() + "<|endoftext|>"
+		example["example"] = ref_example
+
+		examples.append(example)
+
+	np.random.shuffle(examples)
+
+	if limit is None:
+		limit = len(examples)
+	assert limit >= 0
+	examples = examples[:limit]
+
+	output_file = os.path.join(
+		config["data_dir"], "refs_{0}.jsonl".format(dataset_name))
+	print(output_file + ": " + str(len(examples)))
+	with jsonlines.open(output_file, "w") as fout:
+		fout.write_all(examples)
+
+
 if __name__ == "__main__":
 	np.random.seed(0)
 
@@ -355,6 +388,10 @@ if __name__ == "__main__":
 		allowed_policy_comps=set([("sup2", "sup2")]),
 		should_split=True)
 
+	sup2vsup2_train_prompts = set()
+	for example in dataset_map["sup2vsup2_train"]:
+		sup2vsup2_train_prompts.add(example["prompt"])
+
 	sup2vsup2_test_prompts = set()
 	for example in dataset_map["sup2vsup2_test"]:
 		sup2vsup2_test_prompts.add(example["prompt"])
@@ -371,6 +408,12 @@ if __name__ == "__main__":
 			if example["prompt"] in sup2vsup2_test_prompts:
 				continue
 			filtered_prompt_to_ref_examples[example["prompt"]].append(example)
+
+	write_refs_dataset(
+		config,
+		filtered_prompt_to_ref_examples,
+		"excludesup2vsup2testprompts",
+		limit=8000)
 
 	add_policy_comp_dataset(
 		examples=filtered_base_dataset,
