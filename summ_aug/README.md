@@ -30,8 +30,10 @@ sbatch --partition=jsteinhardt -w balrog --gres=gpu:1 run.sh \
 		huggingface_finetune:refs_base_{m} \
 		huggingface_generate:refs_base_{m} \
 		evaluate:refs_base_{m} \
-		huggingface_finetune:comparisons_{d}_train_{m} \
-		evaluate:comparisons_{d}_train_{m}#sup2vsup2_test \
+		huggingface_finetune:comparisons_{d}_train_{m}_n{n} \
+		evaluate:comparisons_{d}_train_{m}_n{n}#sup2vsup2_test \
 		--m=gpt2,gpt2-medium,gpt2-large,gpt2-xl \
-		--d=base,sup2vsup2,refvsup2,sup2vsup2+refvsup2,refvsup2policy,refvsup1,refvsup1policy,refvdup,refvdup8k,refvdrop,refvdrop8k)
+		--d=base,sup2vsup2,refvsup2,sup2vsup2+refvsup2,refvsup2policy,\
+			refvsup1,refvsup1policy,refvdup,refvdrop \
+		--n=1k,5k,8k)
 ```

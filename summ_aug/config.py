@@ -111,10 +111,28 @@ def _parse_comparisons_params_str(params_str):
 			"refvsup1",
 			"refvsup1policy",
 			"refvdup",
-			"refvdup8k",
-			"refvdrop",
-			"refvdrop8k"):
+			"refvdrop"):
 			params["data"] = param_str
+		elif param_str.startswith("n") and param_str[1].isdigit():
+			num_str = "0"
+			suffix = ""
+			for i in range(1, len(param_str)):
+				ch = param_str[i]
+				if ch.isdigit():
+					num_str += ch
+				else:
+					suffix = param_str[i:]
+					break
+			num = int(num_str)
+			if suffix == "":
+				num *= 1
+			elif suffix == "k":
+				num *= 1000
+			elif suffix == "all":
+				num = -1
+			else:
+				raise ValueError("Unrecognized suffix: <" + suffix + ">")
+			params["train_data_limit"] = num
 		elif param_str in ("train", "valid", "test"):
 			params["split"] = param_str
 		else:
@@ -147,6 +165,7 @@ def _get_comparisons_config(config, component, params_str):
 			"model_classname": "GPT2DoubleHeadsModel",
 			"tokenizer_classname": "GPT2Tokenizer",
 			"task": "MultipleChoice",
+			"train_data_limit": train_params.get("train_data_limit", -1),
 			"cache_dir": config["cache_dir"],
 			"train_data_file": train_data_file,
 			"output_dir": output_dir,
