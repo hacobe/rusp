@@ -501,15 +501,11 @@ if __name__ == "__main__":
 		dataset_name="refvdup",
 		corrupt_fn=corrupt_ref_by_dup)
 
-	dataset_map["refvdup8k_train"] = dataset_map["refvdup_train"][:8000]
-
 	add_corrupt_ref_dataset(
 		prompt_to_ref_examples=filtered_prompt_to_ref_examples,
 		dataset_map=dataset_map,
 		dataset_name="refvdrop",
 		corrupt_fn=corrupt_ref_by_drop)
-
-	dataset_map["refvdrop8k_train"] = dataset_map["refvdrop_train"][:8000]
 
 	write(config, dataset_map, dataset_names=None)
 
