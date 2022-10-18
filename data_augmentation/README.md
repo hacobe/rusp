@@ -1,4 +1,4 @@
-# summ_aug
+# data_augmentation
 
 Experiments related to data augmentation for language reward models for summarization.
 

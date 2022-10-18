@@ -8,6 +8,82 @@ import tqdm
 import yaml
 
 
+def write_refvsup2_len(config, disallowed_prompts):
+	prompt_to_refs = collections.defaultdict(list)
+	input_fnames = [
+		"refs_base_train.jsonl",
+		"refs_base_valid.jsonl",
+		"refs_base_test.jsonl"
+	]
+	for fname in input_fnames:
+		with jsonlines.open(os.path.join(config["data_dir"], fname), "r") as fin:
+			for example in tqdm.tqdm(fin):
+				prompt_to_refs[example["prompt"]].append(example["completion"].replace("<|endoftext|>", "").strip())
+
+	prompt_to_sups = collections.defaultdict(list)
+	input_fnames = [
+		"comparisons_base_train.jsonl",
+		"comparisons_base_valid.jsonl",
+		"comparisons_base_test.jsonl"
+	]
+	for fname in input_fnames:
+		input_file = os.path.join(config["data_dir"], fname)
+		with jsonlines.open(input_file, "r") as fin:
+			for line in tqdm.tqdm(fin):
+				assert line["example"]["summaries"][0]["text"].strip() == line["completion0"].strip()
+				assert line["example"]["summaries"][1]["text"].strip() == line["completion1"].strip()
+				policy0 = line["example"]["summaries"][0]["policy"]
+				policy1 = line["example"]["summaries"][1]["policy"]
+
+				if policy0 == "ref":
+					prompt_to_refs[line["prompt"]].append(line["example"]["summaries"][0]["text"].strip())
+
+				if policy1 == "ref":
+					prompt_to_refs[line["prompt"]].append(line["example"]["summaries"][1]["text"].strip())
+
+				if policy0 == "sup2":
+					prompt_to_sups[line["prompt"]].append(line["example"]["summaries"][0]["text"].strip())
+
+				if policy1 == "sup2":
+					prompt_to_sups[line["prompt"]].append(line["example"]["summaries"][1]["text"].strip())
+
+	examples = []
+	for prompt in prompt_to_refs:
+		if prompt in sup2vsup2_test_prompts:
+			continue
+
+		if prompt not in prompt_to_sups:
+			continue
+
+		refs = prompt_to_refs[prompt]
+		refs.sort(key=lambda x: -len(x))
+		ref = refs[0]
+
+		sups = prompt_to_sups[prompt]
+		for sup in sups:
+			if len(ref) < len(sup):
+				continue
+
+			r = np.random.random()
+			choice = 0 if r <= 0.5 else 1
+
+			example = {}
+			example["prompt"] = prompt
+			example["completion" + str(choice)] = " " + ref
+			example["completion" + str(1-choice)] = " " + sup
+			example["policy" + str(choice)] = "ref"
+			example["policy" + str(1-choice)] = "sup2"
+			example["choice"] = choice
+			examples.append(example)
+
+	np.random.shuffle(examples)
+
+	output_file = os.path.join(config["data_dir"], "comparisons_refvsup2policylen_train.jsonl")
+	with jsonlines.open(output_file, "w") as fout:
+		fout.write_all(examples)
+	import pdb; pdb.set_trace()
+
+
 def read_base_dataset(config):
 	examples = []
 	input_fnames = [
@@ -408,6 +484,8 @@ if __name__ == "__main__":
 			if example["prompt"] in sup2vsup2_test_prompts:
 				continue
 			filtered_prompt_to_ref_examples[example["prompt"]].append(example)
+
+	write_refvsup2_len(config, sup2vsup2_test_prompts)
 
 	write_refs_dataset(
 		config,

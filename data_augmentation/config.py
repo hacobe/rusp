@@ -50,7 +50,8 @@ def _parse_params_str(params_str):
 			"excludesup2vsup2testprompts",
 			"refvgpt2",
 			"refvgpt2d0.3",
-			"gpt2vgpt2d0.3"):
+			"gpt2vgpt2d0.3",
+			"refvsup2policylen"):
 			params["data"] = param_str
 		elif param_str[0] == "n" and param_str[1].isdigit():
 			num_str = "0"
