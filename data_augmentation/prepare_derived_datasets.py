@@ -8,82 +8,6 @@ import tqdm
 import yaml
 
 
-def write_refvsup2_len(config, disallowed_prompts):
-	prompt_to_refs = collections.defaultdict(list)
-	input_fnames = [
-		"refs_base_train.jsonl",
-		"refs_base_valid.jsonl",
-		"refs_base_test.jsonl"
-	]
-	for fname in input_fnames:
-		with jsonlines.open(os.path.join(config["data_dir"], fname), "r") as fin:
-			for example in tqdm.tqdm(fin):
-				prompt_to_refs[example["prompt"]].append(example["completion"].replace("<|endoftext|>", "").strip())
-
-	prompt_to_sups = collections.defaultdict(list)
-	input_fnames = [
-		"comparisons_base_train.jsonl",
-		"comparisons_base_valid.jsonl",
-		"comparisons_base_test.jsonl"
-	]
-	for fname in input_fnames:
-		input_file = os.path.join(config["data_dir"], fname)
-		with jsonlines.open(input_file, "r") as fin:
-			for line in tqdm.tqdm(fin):
-				assert line["example"]["summaries"][0]["text"].strip() == line["completion0"].strip()
-				assert line["example"]["summaries"][1]["text"].strip() == line["completion1"].strip()
-				policy0 = line["example"]["summaries"][0]["policy"]
-				policy1 = line["example"]["summaries"][1]["policy"]
-
-				if policy0 == "ref":
-					prompt_to_refs[line["prompt"]].append(line["example"]["summaries"][0]["text"].strip())
-
-				if policy1 == "ref":
-					prompt_to_refs[line["prompt"]].append(line["example"]["summaries"][1]["text"].strip())
-
-				if policy0 == "sup2":
-					prompt_to_sups[line["prompt"]].append(line["example"]["summaries"][0]["text"].strip())
-
-				if policy1 == "sup2":
-					prompt_to_sups[line["prompt"]].append(line["example"]["summaries"][1]["text"].strip())
-
-	examples = []
-	for prompt in prompt_to_refs:
-		if prompt in sup2vsup2_test_prompts:
-			continue
-
-		if prompt not in prompt_to_sups:
-			continue
-
-		refs = prompt_to_refs[prompt]
-		refs.sort(key=lambda x: -len(x))
-		ref = refs[0]
-
-		sups = prompt_to_sups[prompt]
-		for sup in sups:
-			if len(ref) < len(sup):
-				continue
-
-			r = np.random.random()
-			choice = 0 if r <= 0.5 else 1
-
-			example = {}
-			example["prompt"] = prompt
-			example["completion" + str(choice)] = " " + ref
-			example["completion" + str(1-choice)] = " " + sup
-			example["policy" + str(choice)] = "ref"
-			example["policy" + str(1-choice)] = "sup2"
-			example["choice"] = choice
-			examples.append(example)
-
-	np.random.shuffle(examples)
-
-	output_file = os.path.join(config["data_dir"], "comparisons_refvsup2policylen_train.jsonl")
-	with jsonlines.open(output_file, "w") as fout:
-		fout.write_all(examples)
-	import pdb; pdb.set_trace()
-
-
 def read_base_dataset(config):
 	examples = []
 	input_fnames = [
@@ -413,21 +337,92 @@ def add_corrupt_ref_dataset(
 	dataset_map[dataset_name + "_train"] = examples[:limit]
 
 
-def write_refs_dataset(config, prompt_to_ref_examples, dataset_name, limit=None):
+def get_maskedref_prompt(ref_example, word_punct_tokenizer):
+	summary = ref_example["summary"].strip()
+
+	sent_spans = segment(summary, word_punct_tokenizer)
+
+	if len(sent_spans) == 1:
+		return None
+
+	summary_parts = [summary[s[0]:s[1]] for s in sent_spans]
+	assert "".join(summary_parts) == summary
+
+	num_nonpunc_tokens_in_sent_spans = []
+	for start, end in sent_spans:
+		summary_part = summary[start:end]
+		num_nonpunc_tokens = count_num_tokens(
+			summary_part, word_punct_tokenizer)["num_nonpunc_tokens"]
+		num_nonpunc_tokens_in_sent_spans.append(num_nonpunc_tokens)
+
+	eligible_indices = []
+	for j, num_nonpunc_tokens in enumerate(num_nonpunc_tokens_in_sent_spans):
+		if num_nonpunc_tokens >= 5:
+			eligible_indices.append(j)
+
+	if len(eligible_indices) <= 1:
+		return None
+
+	index = np.random.randint(0, len(eligible_indices))
+
+	included_summary_parts = []
+	mask_part = None
+	for j in range(len(summary_parts)):
+		summary_part = summary_parts[j].strip()
+		if j == eligible_indices[index]:
+			summary_part_prefix = summary_part
+			summary_part_suffix = ""
+			if len(summary_part) > 0 and summary_part[-1] in string.punctuation:
+				start = len(summary_part) - 1
+				for k in range(len(summary_part)-1, -1, -1):
+					if summary_part[k] not in string.punctuation:
+						start = k + 1
+						break
+				summary_part_prefix = summary_part[:start]
+				summary_part_suffix = summary_part[start:]
+
+			mask_tokens = ["[CLS]"]
+			mask_part = " ".join(mask_tokens) + summary_part_suffix
+			new_summary_part = mask_part 
+		else:
+			new_summary_part = summary_part
+		included_summary_parts.append(new_summary_part)
+	assert mask_part is not None
+
+	new_summary = " ".join(included_summary_parts).strip()
+
+	new_prompt = "SUBREDDIT: r/" + ref_example["subreddit"].strip() + "\n" + new_summary + "\nTL;DR:"
+
+	return new_prompt
+
+
+def write_refs_dataset(config, prompt_to_ref_examples, dataset_name, limit=None, should_split=False):
+	word_punct_tokenizer = nltk.tokenize.WordPunctTokenizer()
+
 	examples = []
-	prompts = set()
+	new_prompts = set()
 	for prompt in tqdm.tqdm(prompt_to_ref_examples):
 		ref_examples = prompt_to_ref_examples[prompt]
 		# sort so that longest completion is first.
 		ref_examples.sort(key=lambda x: -len(x["summary"]))
 		ref_example = ref_examples[0]
 
-		if ref_example["prompt"] in prompts:
+		if dataset_name == "excludesup2vsup2testprompts":
+			new_prompt = ref_example["prompt"]
+		elif dataset_name == "maskedref":
+			new_prompt = get_maskedref_prompt(ref_example, word_punct_tokenizer)
+		else:
+			raise ValueError("Unrecognized dataset_name: <" + dataset_name + ">")
+
+		if not new_prompt:
 			continue
-		prompts.add(ref_example["prompt"])
+
+		if new_prompt in new_prompts:
+			continue
+		new_prompts.add(new_prompt)
 
 		example = {}
-		example["prompt"] = ref_example["prompt"]
+		example["prompt"] = new_prompt
 		example["completion"] = " " + ref_example["summary"].strip() + "<|endoftext|>"
 		example["example"] = ref_example
 
@@ -440,11 +435,31 @@ def write_refs_dataset(config, prompt_to_ref_examples, dataset_name, limit=None)
 	assert limit >= 0
 	examples = examples[:limit]
 
+	if not should_split:
+		output_file = os.path.join(
+			config["data_dir"], "refs_{0}.jsonl".format(dataset_name))
+		print(output_file + ": " + str(len(examples)))
+		with jsonlines.open(output_file, "w") as fout:
+			fout.write_all(examples)
+		return
+
+	n = len(examples)
+	n_train = n // 2
+
+	train_examples = examples[:n_train]
+	test_examples = examples[n_train:]
+
 	output_file = os.path.join(
-		config["data_dir"], "refs_{0}.jsonl".format(dataset_name))
-	print(output_file + ": " + str(len(examples)))
+		config["data_dir"], "refs_{0}_train.jsonl".format(dataset_name))
+	print(output_file + ": " + str(len(train_examples)))
 	with jsonlines.open(output_file, "w") as fout:
-		fout.write_all(examples)
+		fout.write_all(train_examples)
+
+	output_file = os.path.join(
+		config["data_dir"], "refs_{0}_test.jsonl".format(dataset_name))
+	print(output_file + ": " + str(len(test_examples)))
+	with jsonlines.open(output_file, "w") as fout:
+		fout.write_all(test_examples)
 
 
 if __name__ == "__main__":
@@ -485,7 +500,12 @@ if __name__ == "__main__":
 				continue
 			filtered_prompt_to_ref_examples[example["prompt"]].append(example)
 
-	write_refvsup2_len(config, sup2vsup2_test_prompts)
+	write_refs_dataset(
+		config,
+		filtered_prompt_to_ref_examples,
+		"maskedref",
+		limit=20000,
+		should_split=True)
 
 	write_refs_dataset(
 		config,

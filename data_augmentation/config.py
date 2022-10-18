@@ -48,6 +48,8 @@ def _parse_params_str(params_str):
 			"refvdup",
 			"refvdrop",
 			"excludesup2vsup2testprompts",
+			"maskedref",
+			"refvmaskedref",
 			"refvgpt2",
 			"refvgpt2d0.3",
 			"gpt2vgpt2d0.3",
@@ -102,12 +104,20 @@ def get_config(experiment):
 		assert not os.path.exists(output_dir), output_dir
 		os.makedirs(output_dir)
 
+		if finetune_params["data"].startswith("masked"):
+			task = "DecoderOnlyMaskedSeq2Seq"
+			pretrained_model_name_or_path = _get_checkpoint_dir(
+				config, "refs_base_train_" + finetune_params["model"])
+		else:
+			task = "DecoderOnlySeq2Seq"
+			pretrained_model_name_or_path = finetune_params["model"]
+
 		if finetune_params["mode"] == "refs":
 			cfg = ml_collections.ConfigDict({
-				"pretrained_model_name_or_path": finetune_params["model"],
+				"pretrained_model_name_or_path": pretrained_model_name_or_path,
 				"model_classname": "GPT2LMHeadModel",
 				"tokenizer_classname": "GPT2Tokenizer",
-				"task": "DecoderOnlySeq2Seq",
+				"task": task,
 				"cache_dir": config["cache_dir"],
 				"train_data_file": train_data_file,
 				"output_dir": output_dir,

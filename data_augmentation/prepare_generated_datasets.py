@@ -85,20 +85,27 @@ if __name__ == "__main__":
 
 	policy_to_prompt_to_example = {}
 
-	input_file = os.path.join(config["data_dir"], "refs_excludesup2vsup2testprompts.jsonl")
-	policy_to_prompt_to_example["ref"] = get_prompt_to_ref_example(input_file)
-
 	policy_to_input_file = {
 		"gpt2": get_predictions_file(config, "refs_base_train_gpt2", "excludesup2vsup2testprompts"),
 		"gpt2d0.3": get_predictions_file(config, "refs_base_train_gpt2", "excludesup2vsup2testprompts_d0.3"),
+		"maskedref": get_predictions_file(config, "refs_maskedref_train_gpt2", "maskedref_test"),
 	}
 	for policy in policy_to_input_file:
 		input_file = policy_to_input_file[policy]
 		policy_to_prompt_to_example[policy] = get_prompt_to_pred_example(input_file)
 
 	dataset_map = {}
+
+	input_file = os.path.join(config["data_dir"], "refs_excludesup2vsup2testprompts.jsonl")
+	policy_to_prompt_to_example["ref"] = get_prompt_to_ref_example(input_file)
+
 	add_comparisons_dataset(policy_to_prompt_to_example, "ref", "gpt2", dataset_map)
 	add_comparisons_dataset(policy_to_prompt_to_example, "ref", "gpt2d0.3", dataset_map)
 	add_comparisons_dataset(policy_to_prompt_to_example, "gpt2", "gpt2d0.3", dataset_map)
+
+	input_file = os.path.join(config["data_dir"], "refs_maskedref_test.jsonl")
+	policy_to_prompt_to_example["ref"] = get_prompt_to_ref_example(input_file)
+
+	add_comparisons_dataset(policy_to_prompt_to_example, "ref", "maskedref", dataset_map)
 
 	write(config, dataset_map, dataset_names=None)
