@@ -22,14 +22,14 @@ def get_prompt_to_ref_example(input_file):
 		for line in fin:
 			assert line["prompt"] not in prompt_to_example
 			example = {}
-			example["completion"] = " " + line["example"]["completion"].replace("<|endoftext|>", "").strip()
+			example["completion"] = " " + line["completion"].replace("<|endoftext|>", "").strip()
 			example["example"] = line
 			prompt_to_example[line["prompt"]] = example
 	return prompt_to_example
 
 
-def add_comparisons_dataset(policy_to_prompt_to_example, good_policy, bad_policy, dataset_map):
-	dataset_name = good_policy + "v" + bad_policy
+def add_dataset(policy_to_prompt_to_example, good_policy, bad_policy, dataset_name, dataset_map):
+	policy_comp_name = good_policy + "v" + bad_policy
 
 	prompt_to_good_example = policy_to_prompt_to_example[good_policy]
 	prompt_to_bad_example = policy_to_prompt_to_example[bad_policy]
@@ -56,7 +56,7 @@ def add_comparisons_dataset(policy_to_prompt_to_example, good_policy, bad_policy
 
 	np.random.shuffle(examples)
 
-	dataset_map[dataset_name + "_train"] = examples
+	dataset_map[dataset_name + "_" + policy_comp_name + "_train"] = examples
 
 
 def get_predictions_file(config, model_name, prediction_name):
@@ -64,17 +64,14 @@ def get_predictions_file(config, model_name, prediction_name):
 		"predictions_" + prediction_name + ".jsonl")
 
 
-def write(config, dataset_map, dataset_names=None):
-	if not dataset_names:
-		dataset_names = sorted(list(dataset_map.keys()))
-
-	for dataset_name in dataset_names:
+def write(config, dataset_map):
+	for key in dataset_map:
 		output_file = os.path.join(
-			config["data_dir"], "comparisons_" + dataset_name + ".jsonl")
+			config["data_dir"], "comparisons_" + key + ".jsonl")
 		print("{0}: {1}".format(
-			output_file, len(dataset_map[dataset_name])))
+			output_file, len(dataset_map[key])))
 		with jsonlines.open(output_file, "w") as fout:
-			fout.write_all(dataset_map[dataset_name])
+			fout.write_all(dataset_map[key])
 
 
 if __name__ == "__main__":
@@ -83,12 +80,19 @@ if __name__ == "__main__":
 	with open("config.yaml", "r") as fin:
 		config = yaml.load(fin, Loader=yaml.FullLoader)
 
+	dataset_name = "tldr"
+
 	policy_to_prompt_to_example = {}
 
 	policy_to_input_file = {
-		"gpt2": get_predictions_file(config, "refs_base_train_gpt2", "excludesup2vsup2testprompts"),
-		"gpt2d0.3": get_predictions_file(config, "refs_base_train_gpt2", "excludesup2vsup2testprompts_d0.3"),
-		"maskedref": get_predictions_file(config, "refs_maskedref_train_gpt2", "maskedref_test"),
+		"gpt2": get_predictions_file(
+			config, "refs_" + dataset_name + "_all_train_gpt2", dataset_name + "_unmodifiedprompt"),
+		"gpt2d0.3": get_predictions_file(
+			config, "refs_" + dataset_name + "_all_train_gpt2", dataset_name + "_unmodifiedprompt_d0.3"),
+		"maskedrefprompt": get_predictions_file(
+			config, "refs_" + dataset_name + "_maskedrefprompt_train_gpt2", dataset_name + "_maskedrefprompt_test"),
+		"shuffledprompt": get_predictions_file(
+			config, "refs_" + dataset_name + "_all_train_gpt2", dataset_name + "_shuffledprompt"),
 	}
 	for policy in policy_to_input_file:
 		input_file = policy_to_input_file[policy]
@@ -96,16 +100,16 @@ if __name__ == "__main__":
 
 	dataset_map = {}
 
-	input_file = os.path.join(config["data_dir"], "refs_excludesup2vsup2testprompts.jsonl")
+	input_file = os.path.join(config["data_dir"], "refs_" + dataset_name + "_unmodifiedprompt.jsonl")
 	policy_to_prompt_to_example["ref"] = get_prompt_to_ref_example(input_file)
+	add_dataset(policy_to_prompt_to_example, "gpt2", "gpt2d0.3", dataset_name, dataset_map)
 
-	add_comparisons_dataset(policy_to_prompt_to_example, "ref", "gpt2", dataset_map)
-	add_comparisons_dataset(policy_to_prompt_to_example, "ref", "gpt2d0.3", dataset_map)
-	add_comparisons_dataset(policy_to_prompt_to_example, "gpt2", "gpt2d0.3", dataset_map)
-
-	input_file = os.path.join(config["data_dir"], "refs_maskedref_test.jsonl")
+	input_file = os.path.join(config["data_dir"], "refs_" + dataset_name + "_maskedrefprompt_test.jsonl")
 	policy_to_prompt_to_example["ref"] = get_prompt_to_ref_example(input_file)
+	add_dataset(policy_to_prompt_to_example, "ref", "maskedrefprompt", dataset_name, dataset_map)
 
-	add_comparisons_dataset(policy_to_prompt_to_example, "ref", "maskedref", dataset_map)
+	input_file = os.path.join(config["data_dir"], "refs_" + dataset_name + "_shuffledprompt.jsonl")
+	policy_to_prompt_to_example["ref"] = get_prompt_to_ref_example(input_file)
+	add_dataset(policy_to_prompt_to_example, "ref", "shuffledprompt", dataset_name, dataset_map)
 
-	write(config, dataset_map, dataset_names=None)
+	write(config, dataset_map)

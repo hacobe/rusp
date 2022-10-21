@@ -17,36 +17,44 @@ First download the data:
 Then run:
 
 ```
-python prepare_refs_dataset.py
-python prepare_comparisons_dataset.py
+python prepare_tldr_datasets.py
+python prepare_cnndm_datasets.py
 ```
 
 ## Experiments
 
 ```
-python prepare_derived_datasets.py
+python start_synthetic_datasets.py
 
 sbatch --partition=jsteinhardt -w balrog --gres=gpu:1 run.sh \
 	$(python ../expand.py \
-		huggingface_finetune:refs_base_train_{m} \
-		huggingface_generate:refs_base_train_{m}#base_test \
-		evaluate:refs_base_train_{m}#base_test \
-		huggingface_finetune:comparisons_{d}_train_{m}_n{n} \
-		evaluate:comparisons_{d}_train_{m}_n{n}#sup2vsup2_test \
-		huggingface_finetune:refs_maskedref_train_{m} \
-		huggingface_generate:refs_maskedref_train_{m}#maskedref_test \
-		huggingface_generate:refs_base_train_gpt2#excludesup2vsup2testprompts \
-		--m=gpt2 \
-		--d=base,refvsup2,sup2vsup2+refvsup2,refvsup2policy,refvsup1,refvsup1policy \
-		--n=8k)
+		huggingface_finetune:refs_{d}_all_train_{m} \
+		huggingface_generate:refs_{d}_all_train_{m}#{d}_all_test \
+		evaluate:refs_{d}_all_train_{m}#{d}_all_test \
+		huggingface_finetune:comparisons_{d}_all_train_{m} \
+		evaluate:comparisons_{d}_all_train_{m}#{d}_all_test \
+		huggingface_generate:refs_{d}_all_train_{m}#{d}_unmodifiedprompt \
+		huggingface_generate:refs_{d}_all_train_{m}#{d}_unmodifiedprompt_d0.1 \
+		huggingface_generate:refs_{d}_all_train_{m}#{d}_unmodifiedprompt_d0.2 \
+		huggingface_generate:refs_{d}_all_train_{m}#{d}_unmodifiedprompt_d0.3 \
+		huggingface_generate:refs_{d}_all_train_{m}#{d}_unmodifiedprompt_t0.7 \
+		huggingface_generate:refs_{d}_all_train_{m}#{d}_unmodifiedprompt_d0.1_t0.7 \
+		huggingface_generate:refs_{d}_all_train_{m}#{d}_unmodifiedprompt_d0.2_t0.7 \
+		huggingface_generate:refs_{d}_all_train_{m}#{d}_unmodifiedprompt_d0.3_t0.7 \
+		huggingface_generate:refs_{d}_all_train_{m}#{d}_shuffledprompt \
+		huggingface_finetune:refs_{d}_maskedrefprompt_train_{m} \
+		huggingface_generate:refs_{d}_maskedrefprompt_train_{m}#{d}_maskedrefprompt_test \
+		--d=tldr \
+		--m=gpt2)
 
-python prepare_generated_datasets.py
+python finish_synthetic_datasets.py
 
 sbatch --partition=jsteinhardt -w balrog --gres=gpu:1 run.sh \
 	$(python ../expand.py \
-		huggingface_finetune:comparisons_{d}_train_{m}_n{n} \
-		evaluate:comparisons_{d}_train_{m}_n{n}#sup2vsup2_test \
+		huggingface_finetune:comparisons_{d}_{p}_train_{m}_n{n} \
+		evaluate:comparisons_{d}_{p}_train_{m}_n{n}#{d}_refvsup+supvsup_test \
+		--d=tldr \
 		--m=gpt2 \
-		--d=sup2vsup2,refvdup,refvdrop,refvmaskedref,gpt2vgpt2d0.3 \
-		--n=1k,2k,3k,4k,5k,6k,7k,8k)
+		--p=refvsup+supvsup,gpt2vgpt2d0.3,refvmaskedrefprompt,refvshuffledprompt \
+		--n=1k,5k,10k)
 ```

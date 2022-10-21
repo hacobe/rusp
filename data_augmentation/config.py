@@ -3,11 +3,17 @@ import os
 import yaml
 
 
-MODELS = ["gpt2", "gpt2-medium", "gpt2-large", "gpt2-xl"]
+MODELS = ["gpt2", "gpt2-medium", "gpt2-large", "gpt2-xl", "gpt-neo"]
 
 
 def _get_model_dir(config, params_str):
 	return os.path.join(config["models_dir"], params_str)
+
+
+def _get_model_classname(model):
+	if model == "gpt-neo":
+		return "GPTNeoForCausalLM"
+	return "GPT2LMHeadModel"
 
 
 def _get_checkpoint_dir(config, params_str):
@@ -15,10 +21,22 @@ def _get_checkpoint_dir(config, params_str):
 	return os.path.join(model_dir, "final_checkpoint")
 
 
+def _get_refs_checkpoint_dir(config, params):
+	params_str = "refs"
+	params_str += "_" + params["data"]
+	params_str += "_all_train"
+	params_str += "_" + params["model"]
+	return _get_checkpoint_dir(config, params_str)
+
+
 def _get_data_filename(params):
-	filename = params["mode"] + "_" + params["data"]
+	filename = params["mode"]
+	filename += "_" + params["data"]
+	filename += "_" + params["policy_comp"]
+
 	if "split" in params:
 		filename += "_" + params["split"]
+
 	filename += ".jsonl"
 	return filename
 
@@ -37,24 +55,18 @@ def _parse_params_str(params_str):
 			params["mode"] = param_str
 		elif param_str in MODELS:
 			params["model"] = param_str
-		elif param_str in (
-			"base",
-			"sup2vsup2",
-			"refvsup2",
-			"sup2vsup2+refvsup2",
-			"refvsup2policy",
-			"refvsup1",
-			"refvsup1policy",
-			"refvdup",
-			"refvdrop",
-			"excludesup2vsup2testprompts",
-			"maskedref",
-			"refvmaskedref",
-			"refvgpt2",
-			"refvgpt2d0.3",
-			"gpt2vgpt2d0.3",
-			"refvsup2policylen"):
+		elif param_str in ("tldr", "cnndm"):
 			params["data"] = param_str
+		elif param_str in (
+			"all",
+			"refvsup+supvsup",
+			"unmodifiedprompt",
+			"maskedrefprompt",
+			"shuffledprompt",
+			"gpt2vgpt2d0.3",
+			"refvmaskedrefprompt",
+			"refvshuffledprompt"):
+			params["policy_comp"] = param_str
 		elif param_str[0] == "n" and param_str[1].isdigit():
 			num_str = "0"
 			suffix = ""
@@ -77,6 +89,8 @@ def _parse_params_str(params_str):
 			params["train_data_limit"] = num
 		elif param_str[0] == "d" and param_str[1].isdigit():
 			params["dropout_prob"] = float(param_str[1:])
+		elif param_str[0] == "t" and param_str[1].isdigit():
+			params["temperature"] = float(param_str[1:])
 		elif param_str in ("train", "valid", "test"):
 			params["split"] = param_str
 		else:
@@ -104,18 +118,21 @@ def get_config(experiment):
 		assert not os.path.exists(output_dir), output_dir
 		os.makedirs(output_dir)
 
-		if finetune_params["data"].startswith("masked"):
+		if finetune_params["policy_comp"].startswith("masked"):
 			task = "DecoderOnlyMaskedSeq2Seq"
-			pretrained_model_name_or_path = _get_checkpoint_dir(
-				config, "refs_base_train_" + finetune_params["model"])
+			pretrained_model_name_or_path = _get_refs_checkpoint_dir(
+				config, finetune_params)
 		else:
 			task = "DecoderOnlySeq2Seq"
-			pretrained_model_name_or_path = finetune_params["model"]
+			if finetune_params["model"] == "gpt-neo":
+				pretrained_model_name_or_path = "EleutherAI/gpt-neo-1.3B"
+			else:
+				pretrained_model_name_or_path = finetune_params["model"]
 
 		if finetune_params["mode"] == "refs":
 			cfg = ml_collections.ConfigDict({
 				"pretrained_model_name_or_path": pretrained_model_name_or_path,
-				"model_classname": "GPT2LMHeadModel",
+				"model_classname": _get_model_classname(finetune_params["model"]),
 				"tokenizer_classname": "GPT2Tokenizer",
 				"task": task,
 				"cache_dir": config["cache_dir"],
@@ -136,8 +153,8 @@ def get_config(experiment):
 			return cfg
 		elif finetune_params["mode"] == "comparisons":
 			cfg = ml_collections.ConfigDict({
-				"pretrained_model_name_or_path": _get_checkpoint_dir(
-					config, "refs_base_train_" + finetune_params["model"]),
+				"pretrained_model_name_or_path": _get_refs_checkpoint_dir(
+					config, finetune_params),
 				"model_classname": "GPT2DoubleHeadsModel",
 				"tokenizer_classname": "GPT2Tokenizer",
 				"task": "MultipleChoice",
@@ -178,19 +195,20 @@ def get_config(experiment):
 		cfg = ml_collections.ConfigDict({
 			"input_file": os.path.join(config["data_dir"], _get_data_filename(generate_params)),
 			"model_dir": checkpoint_dir,
+			"model_classname": _get_model_classname(checkpoint_params["model"]),
 			"output_file": os.path.join(checkpoint_dir, _get_predictions_filename(generate_params_str)),
 			"num_beams": 1,
 			"num_return_sequences": 1,
 			"max_num_tokens": 48,
-			"top_k": 50,
+			"top_k": -1,
 			"cache_dir": config["cache_dir"],
 			"include_input_data": True,
 			"exclude_input_keys": "",
 			"limit": -1,
 			"start": 0,
-			"temperature": 1.0,
+			"temperature": generate_params.get("temperature", 1.0),
 			"dropout_prob": generate_params.get("dropout_prob", 0.0),
-			"do_sample": False
+			"do_sample": ("temperature" in generate_params)
 		})
 		return cfg
 	elif component == "evaluate":
