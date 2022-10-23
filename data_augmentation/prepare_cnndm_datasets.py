@@ -9,11 +9,12 @@ import yaml
 
 
 def get_ref_examples(config):
+	num_chars_per_token = 4
+	max_length = 512 * num_chars_per_token
+
 	dataset = datasets.load_dataset("cnn_dailymail", "3.0.0", cache_dir=config["cache_dir"])
 
 	ref_examples = []
-	prompts = set()
-	n_skipped = 0
 	for key in dataset.keys():
 		if key == "validation":
 			split = "valid"
@@ -24,8 +25,8 @@ def get_ref_examples(config):
 		for i in tqdm.tqdm(range(len(dataset[key]))):
 			line = dataset[key][i]
 
-			prompt = "ARTICLE: " + line["article"].strip() + "\n"
-			prompt += "TL;DR:"
+			article = line["article"]
+			prompt = article[:max_length].strip() + "\nTL;DR:"
 
 			example = {}
 			example["prompt"] = prompt
@@ -40,6 +41,9 @@ def get_ref_examples(config):
 
 
 def get_comparison_examples(config):
+	num_chars_per_token = 4
+	max_length = 512 * num_chars_per_token
+
 	input_dir = os.path.join(config["data_dir"], "comparisons/")
 
 	input_files = []
@@ -59,11 +63,10 @@ def get_comparison_examples(config):
 			for line in fin:
 				assert line["split"] == "valid2"
 
-				prompt = "ARTICLE: " + line["info"]["article"].strip() + "\n"
-				prompt += "TL;DR:"
+				article = line["info"]["article"].strip()
+				prompt = article[:max_length].strip() + "\nTL;DR:"
 
 				example = {}
-				example["example"] = line
 				example["prompt"] = prompt
 				assert len(line["summaries"]) == 2
 				assert line["choice"] in set([0, 1])
@@ -74,6 +77,7 @@ def get_comparison_examples(config):
 				example["split"] = line["split"]
 				example["policy0"] = line["summaries"][0]["policy"]
 				example["policy1"] = line["summaries"][1]["policy"]
+				example["example"] = line
 
 				comparison_examples.append(example)
 
