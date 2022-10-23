@@ -111,13 +111,15 @@ def add_dataset(
 	dataset_name,
 	prompt_name,
 	tokenizer,
-	train_prop=1.0,
-	limit=None):
+	train_limit=None,
+	test_limit=None,
+	test_prompts=set()):
 	doc_tokenizer = nltk.tokenize.RegexpTokenizer(r"\s+", gaps=True)
 	nlp = spacy.load('en_core_web_sm')
 	stops = nltk.corpus.stopwords.words('english')
 
-	ref_examples = []
+	train_examples = []
+	test_examples = []
 	new_prompts = set()
 	for prompt in tqdm.tqdm(prompt_to_summary_and_example):
 		summary, example = prompt_to_summary_and_example[prompt]
@@ -141,10 +143,14 @@ def add_dataset(
 			else:
 				text = None
 
-			try:
-				sents = nltk.sent_tokenize(text)
-			except:
+			if text is None:
 				continue
+
+			if not text.strip():
+				continue
+
+			sents = nltk.sent_tokenize(text)
+			
 			np.random.shuffle(sents)
 			new_prompt = " ".join(sents).strip() + "\nTL;DR:"
 		else:
@@ -158,26 +164,32 @@ def add_dataset(
 		ref_example["prompt"] = new_prompt
 		ref_example["completion"] = " " + summary.strip() + "<|endoftext|>"
 		ref_example["example"] = example
-		ref_examples.append(ref_example)
 
-	np.random.shuffle(ref_examples)
+		if prompt in test_prompts:
+			test_examples.append(ref_example)
+		else:
+			train_examples.append(ref_example)
+
+	np.random.shuffle(train_examples)
+	np.random.shuffle(test_examples)
 
 	key = "refs_" + dataset_name + "_" + prompt_name
 
-	if limit is None:
-		limit = len(ref_examples)
+	if train_limit is None:
+		train_limit = len(train_examples)
 
-	ref_examples = ref_examples[:limit]
+	if test_limit is None:
+		test_limit = len(test_examples)
 
-	if train_prop == 1.0:
-		dataset_map[key] = ref_examples
+	train_examples = train_examples[:train_limit]
+	test_examples = test_examples[:test_limit]
+
+	if not test_examples:
+		dataset_map[key] = train_examples
 		return
 
-	n = len(ref_examples)
-	n_train = int(train_prop * n)
-
-	dataset_map[key + "_train"] = ref_examples[:n_train]
-	dataset_map[key + "_test"] = ref_examples[n_train:]
+	dataset_map[key + "_train"] = train_examples
+	dataset_map[key + "_test"] = test_examples
 
 
 if __name__ == "__main__":
@@ -190,8 +202,8 @@ if __name__ == "__main__":
 	tokenizer.pad_token = tokenizer.unk_token
 	tokenizer.add_special_tokens({"cls_token": "[CLS]"})
 
-	#dataset_name = "cnndm"
-	dataset_name = "tldr"
+	dataset_name = "cnndm"
+	#dataset_name = "tldr"
 
 	# Get as many references as possible.
 	# Using the references that appear in the training set is not sufficient.
@@ -207,8 +219,14 @@ if __name__ == "__main__":
 		dataset_name=dataset_name,
 		prompt_name="unmodifiedprompt",
 		tokenizer=tokenizer,
-		train_prop=1.0,
-		limit=10000)
+		train_limit=40000)
+
+	unmodified_prompt_to_summary_and_example = {}
+	test_prompts = set()
+	for example in dataset_map["refs_" + dataset_name + "_unmodifiedprompt"]:
+		unmodified_prompt_to_summary_and_example[example["prompt"]] = (
+			prompt_to_summary_and_example[example["prompt"]])
+		test_prompts.add(example["prompt"])
 
 	add_dataset(
 		prompt_to_summary_and_example=prompt_to_summary_and_example,
@@ -216,17 +234,15 @@ if __name__ == "__main__":
 		dataset_name=dataset_name,
 		prompt_name="maskedrefprompt",
 		tokenizer=tokenizer,
-		train_prop=0.5,
-		limit=20000)
+		train_limit=10000,
+		test_prompts=test_prompts)
 
 	add_dataset(
-		prompt_to_summary_and_example=prompt_to_summary_and_example,
+		prompt_to_summary_and_example=unmodified_prompt_to_summary_and_example,
 		dataset_map=dataset_map,
 		dataset_name=dataset_name,
 		prompt_name="shuffledprompt",
-		tokenizer=tokenizer,
-		train_prop=1.0,
-		limit=10000)
+		tokenizer=tokenizer)
 
 	for key in dataset_map:
 		output_file = os.path.join(config["data_dir"], key + ".jsonl")
