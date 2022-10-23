@@ -3,7 +3,7 @@ import os
 import yaml
 
 
-MODELS = ["gpt2", "gpt2-medium", "gpt2-large", "gpt2-xl", "gpt-neo"]
+MODELS = ["gpt2", "gpt2-medium", "gpt2-large", "gpt2-xl", "gpt-neo", "bart"]
 
 
 def _get_model_dir(config, params_str):
@@ -13,12 +13,20 @@ def _get_model_dir(config, params_str):
 def _get_model_classname(model):
 	if model == "gpt-neo":
 		return "GPTNeoForCausalLM"
+	elif model == "bart":
+		return "BartForConditionalGeneration"
 	return "GPT2LMHeadModel"
 
 
-def _get_checkpoint_dir(config, params_str):
+def _get_tokenizer_classname(model):
+	if model == "bart":
+		return "BartTokenizer"
+	return "GPT2Tokenizer"
+
+
+def _get_checkpoint_dir(config, params_str, checkpoint):
 	model_dir = _get_model_dir(config, params_str)
-	return os.path.join(model_dir, "final_checkpoint")
+	return os.path.join(model_dir, checkpoint)
 
 
 def _get_refs_checkpoint_dir(config, params):
@@ -26,7 +34,7 @@ def _get_refs_checkpoint_dir(config, params):
 	params_str += "_" + params["data"]
 	params_str += "_all_train"
 	params_str += "_" + params["model"]
-	return _get_checkpoint_dir(config, params_str)
+	return _get_checkpoint_dir(config, params_str, "final_checkpoint")
 
 
 def _get_data_filename(params):
@@ -63,9 +71,16 @@ def _parse_params_str(params_str):
 			"unmodifiedprompt",
 			"maskedrefprompt",
 			"shuffledprompt",
-			"gpt2vgpt2d0.3",
+			"gpt2vgpt2d0.2",
+			"refvgpt2d0.2",
+			"refvgpt2",
 			"refvmaskedrefprompt",
-			"refvshuffledprompt"):
+			"refvshuffledprompt",
+			"gpt2vmaskedrefprompt",
+			"gpt2vshuffledprompt",
+			"gpt2vgpt2d0.2+refvgpt2d0.2",
+			"gpt2vgpt2d0.2+refvgpt2",
+			"supvsup"):
 			params["policy_comp"] = param_str
 		elif param_str[0] == "n" and param_str[1].isdigit():
 			num_str = "0"
@@ -91,8 +106,14 @@ def _parse_params_str(params_str):
 			params["dropout_prob"] = float(param_str[1:])
 		elif param_str[0] == "t" and param_str[1].isdigit():
 			params["temperature"] = float(param_str[1:])
+		elif param_str.startswith("steps"):
+			params["steps"] = int(param_str.replace("steps", ""))
+		elif param_str.startswith("cp"):
+			params["checkpoint"] = "checkpoint-" + param_str.replace("cp", "")
 		elif param_str in ("train", "valid", "test"):
 			params["split"] = param_str
+		elif param_str.startswith("seed"):
+			params["seed"] = int(param_str.replace("seed", ""))
 		else:
 			raise ValueError("Unrecognized params: <" + param_str + ">")
 	return params
@@ -133,19 +154,20 @@ def get_config(experiment):
 			cfg = ml_collections.ConfigDict({
 				"pretrained_model_name_or_path": pretrained_model_name_or_path,
 				"model_classname": _get_model_classname(finetune_params["model"]),
-				"tokenizer_classname": "GPT2Tokenizer",
+				"tokenizer_classname": _get_tokenizer_classname(finetune_params["model"]),
 				"task": task,
 				"cache_dir": config["cache_dir"],
 				"train_data_file": train_data_file,
 				"output_dir": output_dir,
-				"seed": 0,
+				"seed": finetune_params.get("seed", 0),
 				"per_device_train_batch_size": 1,
 				"gradient_accumulation_steps": 8,
 				"gradient_checkpointing": True,
 				"num_train_epochs": 1,
 				"learning_rate": 5e-5,
 				"evaluation_strategy": "no",
-				"save_strategy": "no",
+				"save_strategy": "steps" if "steps" in finetune_params else "no",
+				"save_steps": finetune_params.get("steps", 500),
 				"logging_strategy": "epoch",
 				"report_to": "none",
 				"train_data_limit": train_data_limit,
@@ -162,7 +184,7 @@ def get_config(experiment):
 				"cache_dir": config["cache_dir"],
 				"train_data_file": train_data_file,
 				"output_dir": output_dir,
-				"seed": 0,
+				"seed": finetune_params.get("seed", 0),
 				"per_device_train_batch_size": 1,
 				"gradient_accumulation_steps": 64,
 				"gradient_checkpointing": True,
@@ -190,16 +212,30 @@ def get_config(experiment):
 			generate_params["mode"] = checkpoint_params["mode"]
 		assert checkpoint_params["mode"] == generate_params["mode"]
 
-		checkpoint_dir = _get_checkpoint_dir(config, checkpoint_params_str)
+		if checkpoint_params["data"] == "tldr":
+			min_length = 24
+			max_length = 48
+		elif checkpoint_params["data"] == "cnndm":
+			min_length = 30
+			max_length = 130
+		else:
+			raise ValueError("Unrecognized data: <" + checkpoint_params["data"] + ">")
+
+		checkpoint_dir = _get_checkpoint_dir(
+			config,
+			checkpoint_params_str,
+			generate_params.get("checkpoint", "final_checkpoint"))
 
 		cfg = ml_collections.ConfigDict({
 			"input_file": os.path.join(config["data_dir"], _get_data_filename(generate_params)),
 			"model_dir": checkpoint_dir,
 			"model_classname": _get_model_classname(checkpoint_params["model"]),
+			"tokenizer_classname": _get_tokenizer_classname(checkpoint_params["model"]),
 			"output_file": os.path.join(checkpoint_dir, _get_predictions_filename(generate_params_str)),
 			"num_beams": 1,
 			"num_return_sequences": 1,
-			"max_num_tokens": 48,
+			"min_length": min_length,
+			"max_num_tokens": max_length,
 			"top_k": -1,
 			"cache_dir": config["cache_dir"],
 			"include_input_data": True,
@@ -208,7 +244,9 @@ def get_config(experiment):
 			"start": 0,
 			"temperature": generate_params.get("temperature", 1.0),
 			"dropout_prob": generate_params.get("dropout_prob", 0.0),
-			"do_sample": ("temperature" in generate_params)
+			"do_sample": ("temperature" in generate_params),
+			"seed": generate_params.get("seed", 0),
+			"truncation": True,
 		})
 		return cfg
 	elif component == "evaluate":
@@ -222,7 +260,10 @@ def get_config(experiment):
 			evaluate_params["mode"] = checkpoint_params["mode"]
 		assert checkpoint_params["mode"] == evaluate_params["mode"]
 
-		checkpoint_dir = _get_checkpoint_dir(config, checkpoint_params_str)
+		checkpoint_dir = _get_checkpoint_dir(
+			config,
+			checkpoint_params_str,
+			evaluate_params.get("checkpoint", "final_checkpoint"))
 
 		if checkpoint_params["mode"] == "refs":
 			filename = _get_predictions_filename(evaluate_params_str)
