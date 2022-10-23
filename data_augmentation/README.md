@@ -34,13 +34,7 @@ sbatch --partition=jsteinhardt -w balrog --gres=gpu:1 run.sh \
 		huggingface_finetune:comparisons_{d}_all_train_{m} \
 		evaluate:comparisons_{d}_all_train_{m}#{d}_all_test \
 		huggingface_generate:refs_{d}_all_train_{m}#{d}_unmodifiedprompt \
-		huggingface_generate:refs_{d}_all_train_{m}#{d}_unmodifiedprompt_d0.1 \
 		huggingface_generate:refs_{d}_all_train_{m}#{d}_unmodifiedprompt_d0.2 \
-		huggingface_generate:refs_{d}_all_train_{m}#{d}_unmodifiedprompt_d0.3 \
-		huggingface_generate:refs_{d}_all_train_{m}#{d}_unmodifiedprompt_t0.7 \
-		huggingface_generate:refs_{d}_all_train_{m}#{d}_unmodifiedprompt_d0.1_t0.7 \
-		huggingface_generate:refs_{d}_all_train_{m}#{d}_unmodifiedprompt_d0.2_t0.7 \
-		huggingface_generate:refs_{d}_all_train_{m}#{d}_unmodifiedprompt_d0.3_t0.7 \
 		huggingface_generate:refs_{d}_all_train_{m}#{d}_shuffledprompt \
 		huggingface_finetune:refs_{d}_maskedrefprompt_train_{m} \
 		huggingface_generate:refs_{d}_maskedrefprompt_train_{m}#{d}_maskedrefprompt_test \
@@ -55,6 +49,17 @@ sbatch --partition=jsteinhardt -w balrog --gres=gpu:1 run.sh \
 		evaluate:comparisons_{d}_{p}_train_{m}_n{n}#{d}_refvsup+supvsup_test \
 		--d=tldr \
 		--m=gpt2 \
-		--p=refvsup+supvsup,gpt2vgpt2d0.3,refvmaskedrefprompt,refvshuffledprompt \
-		--n=1k,5k,10k)
+		--p=refvsup+supvsup,gpt2vgpt2d0.2,\
+			refvgpt2,refvgpt2d0.2,\
+			refvmaskedrefprompt,refvshuffledprompt,\
+			gpt2vmaskedrefprompt,gpt2vshuffledprompt,\
+			gpt2vgpt2d0.2+refvgpt2d0.2,\
+			gpt2vgpt2d0.2+refvgpt2 \
+		--n=1k,5k,10k,20k,30k,40k)
+
+sbatch --partition=jsteinhardt -w balrog --gres=gpu:1 run.sh \
+	$(python ../expand.py \
+		evaluate:comparisons_tldr_refvsup+supvsup_train_{m}_n{n}#cnndm_supvsup_test \
+		--m=gpt2 \
+		--n=1k,5k,10k,20k,30k,40k)
 ```
