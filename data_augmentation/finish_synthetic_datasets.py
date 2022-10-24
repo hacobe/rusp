@@ -1,3 +1,5 @@
+import argparse
+
 import os
 import jsonlines
 import numpy as np
@@ -80,26 +82,29 @@ def write(config, dataset_map):
 			fout.write_all(dataset_map[key])
 
 
-if __name__ == "__main__":
+def main(args):
+	dataset_name = args.dataset_name
+	model = args.model
+
 	np.random.seed(0)
 
 	with open("config.yaml", "r") as fin:
 		config = yaml.load(fin, Loader=yaml.FullLoader)
 
-	dataset_name = "tldr"
-
 	policy_to_prompt_to_example = {}
 
 	policy_to_input_file = {
-		"gpt2": get_predictions_file(
-			config, "refs_" + dataset_name + "_all_train_gpt2", dataset_name + "_unmodifiedprompt"),
-		"gpt2d0.2": get_predictions_file(
-			config, "refs_" + dataset_name + "_all_train_gpt2", dataset_name + "_unmodifiedprompt_d0.2"),
-		"maskedrefprompt": get_predictions_file(
-			config, "refs_" + dataset_name + "_maskedrefprompt_train_gpt2", dataset_name + "_maskedrefprompt_test"),
-		"shuffledprompt": get_predictions_file(
-			config, "refs_" + dataset_name + "_all_train_gpt2", dataset_name + "_shuffledprompt"),
+		model: get_predictions_file(
+			config, "refs_" + dataset_name + "_all_train_" + model, dataset_name + "_unmodifiedprompt"),
+		model + "d0.2": get_predictions_file(
+			config, "refs_" + dataset_name + "_all_train_" + model, dataset_name + "_unmodifiedprompt_d0.2"),
+		model + "maskedrefprompt": get_predictions_file(
+			config, "refs_" + dataset_name + "_maskedrefprompt_train_" + model, dataset_name + "_maskedrefprompt_test"),
 	}
+	if model == "gpt2":
+		policy_to_input_file["shuffledprompt"] = get_predictions_file(
+			config, "refs_" + dataset_name + "_all_train_" + model, dataset_name + "_shuffledprompt")
+
 	for policy in policy_to_input_file:
 		input_file = policy_to_input_file[policy]
 		policy_to_prompt_to_example[policy] = get_prompt_to_pred_example(input_file)
@@ -109,24 +114,24 @@ if __name__ == "__main__":
 	input_file = os.path.join(config["data_dir"], "refs_" + dataset_name + "_unmodifiedprompt.jsonl")
 	policy_to_prompt_to_example["ref"] = get_prompt_to_ref_example(input_file)
 
-	add_dataset(policy_to_prompt_to_example, "gpt2", "gpt2d0.2", dataset_name, dataset_map)
-	add_dataset(policy_to_prompt_to_example, "ref", "gpt2d0.2", dataset_name, dataset_map)
-	add_dataset(policy_to_prompt_to_example, "ref", "gpt2", dataset_name, dataset_map)
+	add_dataset(policy_to_prompt_to_example, model, model + "d0.2", dataset_name, dataset_map)
+	add_dataset(policy_to_prompt_to_example, "ref", model + "d0.2", dataset_name, dataset_map)
+	add_dataset(policy_to_prompt_to_example, "ref", model, dataset_name, dataset_map)
 
-	dataset_map["tldr_gpt2vgpt2d0.2+refvgpt2d0.2_train"] = (
-		dataset_map["tldr_gpt2vgpt2d0.2_train"] + dataset_map["tldr_refvgpt2d0.2_train"]
-	)
-	np.random.shuffle(dataset_map["tldr_gpt2vgpt2d0.2+refvgpt2d0.2_train"])
+	add_dataset(policy_to_prompt_to_example, "ref", model + "maskedrefprompt", dataset_name, dataset_map)
+	add_dataset(policy_to_prompt_to_example, model, model + "maskedrefprompt", dataset_name, dataset_map)
 
-	dataset_map["tldr_gpt2vgpt2d0.2+refvgpt2_train"] = (
-		dataset_map["tldr_gpt2vgpt2d0.2_train"] + dataset_map["tldr_refvgpt2_train"]
-	)
-	np.random.shuffle(dataset_map["tldr_gpt2vgpt2d0.2+refvgpt2_train"])
-
-	add_dataset(policy_to_prompt_to_example, "ref", "maskedrefprompt", dataset_name, dataset_map)
-	add_dataset(policy_to_prompt_to_example, "gpt2", "maskedrefprompt", dataset_name, dataset_map)
-
-	add_dataset(policy_to_prompt_to_example, "ref", "shuffledprompt", dataset_name, dataset_map)
-	add_dataset(policy_to_prompt_to_example, "gpt2", "shuffledprompt", dataset_name, dataset_map)
+	if "shuffledprompt" in policy_to_input_file:
+		add_dataset(policy_to_prompt_to_example, "ref", model + "shuffledprompt", dataset_name, dataset_map)
+		add_dataset(policy_to_prompt_to_example, model, model + "shuffledprompt", dataset_name, dataset_map)
 
 	write(config, dataset_map)
+
+
+if __name__ == "__main__":
+	parser = argparse.ArgumentParser(
+		description="Finish preparation of synthetic datasets.")
+	parser.add_argument("--dataset_name", default="tldr", type=str)
+	parser.add_argument("--model", default="gpt2", type=str)
+	args = parser.parse_args()
+	main(args)

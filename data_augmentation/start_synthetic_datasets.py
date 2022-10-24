@@ -192,7 +192,9 @@ def add_dataset(
 	dataset_map[key + "_test"] = test_examples
 
 
-if __name__ == "__main__":
+def main(args):
+	dataset_name = args.dataset_name
+
 	np.random.seed(0)
 
 	with open("config.yaml", "r") as fin:
@@ -201,9 +203,6 @@ if __name__ == "__main__":
 	tokenizer = transformers.GPT2Tokenizer.from_pretrained("gpt2", cache_dir=config["cache_dir"])
 	tokenizer.pad_token = tokenizer.unk_token
 	tokenizer.add_special_tokens({"cls_token": "[CLS]"})
-
-	dataset_name = "cnndm"
-	#dataset_name = "tldr"
 
 	# Get as many references as possible.
 	# Using the references that appear in the training set is not sufficient.
@@ -247,3 +246,11 @@ if __name__ == "__main__":
 	for key in dataset_map:
 		output_file = os.path.join(config["data_dir"], key + ".jsonl")
 		utils.write_examples(dataset_map[key], output_file)
+
+
+if __name__ == "__main__":
+	parser = argparse.ArgumentParser(
+		description="Start preparation of synthetic datasets.")
+	parser.add_argument("--dataset_name", default="tldr", type=str)
+	args = parser.parse_args()
+	main(args)

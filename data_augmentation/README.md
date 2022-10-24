@@ -24,7 +24,7 @@ python prepare_cnndm_datasets.py
 ## Experiments
 
 ```
-python start_synthetic_datasets.py
+python start_synthetic_datasets.py --dataset_name=tldr
 
 sbatch --partition=jsteinhardt -w balrog --gres=gpu:1 run.sh \
 	$(python ../expand.py \
@@ -41,7 +41,7 @@ sbatch --partition=jsteinhardt -w balrog --gres=gpu:1 run.sh \
 		--d=tldr \
 		--m=gpt2)
 
-python finish_synthetic_datasets.py
+python finish_synthetic_datasets.py --dataset_name=tldr --model=gpt2
 
 sbatch --partition=jsteinhardt -w balrog --gres=gpu:1 run.sh \
 	$(python ../expand.py \
@@ -52,9 +52,7 @@ sbatch --partition=jsteinhardt -w balrog --gres=gpu:1 run.sh \
 		--p=refvsup+supvsup,gpt2vgpt2d0.2,\
 			refvgpt2,refvgpt2d0.2,\
 			refvmaskedrefprompt,refvshuffledprompt,\
-			gpt2vmaskedrefprompt,gpt2vshuffledprompt,\
-			gpt2vgpt2d0.2+refvgpt2d0.2,\
-			gpt2vgpt2d0.2+refvgpt2 \
+			gpt2vgpt2d0.2+refvmaskedrefprompt \
 		--n=1k,5k,10k,20k,30k,40k)
 
 sbatch --partition=jsteinhardt -w balrog --gres=gpu:1 run.sh \
