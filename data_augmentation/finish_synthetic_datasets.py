@@ -30,7 +30,8 @@ def get_prompt_to_ref_example(input_file):
 			prompt = line["example"]["prompt"]
 			assert prompt not in prompt_to_example
 			example = {}
-			example["completion"] = " " + line["completion"].replace("<|endoftext|>", "").strip()
+			example["completion"] = (
+				" " + line["completion"].replace("<|endoftext|>", "").replace(" .", ".").strip())
 			example["example"] = line
 			prompt_to_example[prompt] = example
 	return prompt_to_example
@@ -94,15 +95,15 @@ def main(args):
 	policy_to_prompt_to_example = {}
 
 	policy_to_input_file = {
-		model: get_predictions_file(
-			config, "refs_" + dataset_name + "_all_train_" + model, dataset_name + "_unmodifiedprompt"),
-		model + "d0.2": get_predictions_file(
-			config, "refs_" + dataset_name + "_all_train_" + model, dataset_name + "_unmodifiedprompt_d0.2"),
+		#model: get_predictions_file(
+		#	config, "refs_" + dataset_name + "_all_train_" + model, dataset_name + "_unmodifiedprompt"),
+		#model + "d0.2": get_predictions_file(
+		#	config, "refs_" + dataset_name + "_all_train_" + model, dataset_name + "_unmodifiedprompt_d0.2"),
 		model + "maskedrefprompt": get_predictions_file(
 			config, "refs_" + dataset_name + "_maskedrefprompt_train_" + model, dataset_name + "_maskedrefprompt_test"),
 	}
 	if model == "gpt2":
-		policy_to_input_file["shuffledprompt"] = get_predictions_file(
+		policy_to_input_file[model + "shuffledprompt"] = get_predictions_file(
 			config, "refs_" + dataset_name + "_all_train_" + model, dataset_name + "_shuffledprompt")
 
 	for policy in policy_to_input_file:
@@ -114,16 +115,27 @@ def main(args):
 	input_file = os.path.join(config["data_dir"], "refs_" + dataset_name + "_unmodifiedprompt.jsonl")
 	policy_to_prompt_to_example["ref"] = get_prompt_to_ref_example(input_file)
 
-	add_dataset(policy_to_prompt_to_example, model, model + "d0.2", dataset_name, dataset_map)
-	add_dataset(policy_to_prompt_to_example, "ref", model + "d0.2", dataset_name, dataset_map)
-	add_dataset(policy_to_prompt_to_example, "ref", model, dataset_name, dataset_map)
+	if (model in policy_to_input_file) and (model + "d0.2" in policy_to_input_file):
+		add_dataset(policy_to_prompt_to_example, model, model + "d0.2", dataset_name, dataset_map)
 
-	add_dataset(policy_to_prompt_to_example, "ref", model + "maskedrefprompt", dataset_name, dataset_map)
-	add_dataset(policy_to_prompt_to_example, model, model + "maskedrefprompt", dataset_name, dataset_map)
+	if (model + "d0.2" in policy_to_input_file):
+		add_dataset(policy_to_prompt_to_example, "ref", model + "d0.2", dataset_name, dataset_map)
 
-	if "shuffledprompt" in policy_to_input_file:
-		add_dataset(policy_to_prompt_to_example, "ref", model + "shuffledprompt", dataset_name, dataset_map)
+	if (model in policy_to_input_file):
+		add_dataset(policy_to_prompt_to_example, "ref", model, dataset_name, dataset_map)
+
+	if (model in policy_to_input_file) and (model + "maskedrefprompt" in policy_to_input_file):
+		add_dataset(policy_to_prompt_to_example, model, model + "maskedrefprompt", dataset_name, dataset_map)
+
+	if (model + "maskedrefprompt" in policy_to_input_file):
+		add_dataset(policy_to_prompt_to_example, "ref", model + "maskedrefprompt", dataset_name, dataset_map)
+
+	if (model in policy_to_input_file) and (model + "shuffledprompt" in policy_to_input_file):
 		add_dataset(policy_to_prompt_to_example, model, model + "shuffledprompt", dataset_name, dataset_map)
+
+	if (model + "shuffledprompt" in policy_to_input_file):
+		add_dataset(policy_to_prompt_to_example, "ref", model + "shuffledprompt", dataset_name, dataset_map)
+
 
 	write(config, dataset_map)
 

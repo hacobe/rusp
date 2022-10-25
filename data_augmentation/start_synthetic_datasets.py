@@ -1,5 +1,6 @@
 import utils
 
+import argparse
 import collections
 import jsonlines
 import os
@@ -126,11 +127,27 @@ def add_dataset(
 
 		if prompt_name == "unmodifiedprompt":
 			new_prompt = example["prompt"]
-		elif prompt_name == "maskedrefprompt":
+		elif prompt_name == "maskedrefprompt" and dataset_name == "tldr":
 			new_prompt = get_maskedref_prompt(
 				summary, example, tokenizer, mask_prop=1./3)
-			if dataset_name == "tldr":
-				assert new_prompt.find("SUBREDDIT:") != -1
+			assert new_prompt.find("SUBREDDIT:") != -1
+		elif prompt_name == "maskedrefprompt" and dataset_name == "cnndm":
+			text = summary.strip()
+			summary_ids = tokenizer.encode(text)
+			if len(summary_ids) > 48:
+				continue
+
+			sents = text.split("\n")
+			
+			index = np.random.randint(0, len(sents))
+
+			add_period = sents[index].endswith(" .")
+
+			sents[index] = "[CLS]"
+			if add_period:
+				sents[index] += " ."
+
+			new_prompt = "MASKED: " + "\n".join(sents).strip() + "\nTL;DR:"
 		elif prompt_name == "shuffledprompt":
 			if "post" in example["example"]:
 				text = example["example"]["post"]
