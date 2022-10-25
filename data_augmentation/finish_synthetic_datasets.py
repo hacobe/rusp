@@ -95,16 +95,15 @@ def main(args):
 	policy_to_prompt_to_example = {}
 
 	policy_to_input_file = {
-		#model: get_predictions_file(
-		#	config, "refs_" + dataset_name + "_all_train_" + model, dataset_name + "_unmodifiedprompt"),
-		#model + "d0.2": get_predictions_file(
-		#	config, "refs_" + dataset_name + "_all_train_" + model, dataset_name + "_unmodifiedprompt_d0.2"),
+		model: get_predictions_file(
+			config, "refs_" + dataset_name + "_all_train_" + model, dataset_name + "_unmodifiedprompt"),
+		model + "d0.2": get_predictions_file(
+			config, "refs_" + dataset_name + "_all_train_" + model, dataset_name + "_unmodifiedprompt_d0.2"),
 		model + "maskedrefprompt": get_predictions_file(
 			config, "refs_" + dataset_name + "_maskedrefprompt_train_" + model, dataset_name + "_maskedrefprompt_test"),
+		model + "shuffledprompt": get_predictions_file(
+			config, "refs_" + dataset_name + "_all_train_" + model, dataset_name + "_shuffledprompt"),
 	}
-	if model == "gpt2":
-		policy_to_input_file[model + "shuffledprompt"] = get_predictions_file(
-			config, "refs_" + dataset_name + "_all_train_" + model, dataset_name + "_shuffledprompt")
 
 	for policy in policy_to_input_file:
 		input_file = policy_to_input_file[policy]
@@ -135,7 +134,6 @@ def main(args):
 
 	if (model + "shuffledprompt" in policy_to_input_file):
 		add_dataset(policy_to_prompt_to_example, "ref", model + "shuffledprompt", dataset_name, dataset_map)
-
 
 	write(config, dataset_map)
 
