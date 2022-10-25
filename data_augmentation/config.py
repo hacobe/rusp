@@ -74,13 +74,14 @@ def _parse_params_str(params_str):
 			"gpt2vgpt2d0.2",
 			"refvgpt2d0.2",
 			"refvgpt2",
-			"refvmaskedrefprompt",
-			"refvshuffledprompt",
-			"gpt2vmaskedrefprompt",
-			"gpt2vshuffledprompt",
-			"gpt2vgpt2d0.2+refvgpt2d0.2",
-			"gpt2vgpt2d0.2+refvgpt2",
-			"supvsup"):
+			"refvgpt2maskedrefprompt",
+			"refvgpt2shuffledprompt",
+			"gpt2vgpt2maskedrefprompt",
+			"gpt2vgpt2shuffledprompt",
+			"gpt2vgpt2d0.2+refvgpt2maskedrefprompt",
+			"supvsup",
+			"gpt2-xlvgpt2-xld0.2",
+			"refvgpt2-xlmaskedrefprompt"):
 			params["policy_comp"] = param_str
 		elif param_str[0] == "n" and param_str[1].isdigit():
 			num_str = "0"
@@ -212,15 +213,6 @@ def get_config(experiment):
 			generate_params["mode"] = checkpoint_params["mode"]
 		assert checkpoint_params["mode"] == generate_params["mode"]
 
-		if checkpoint_params["data"] == "tldr":
-			min_length = 24
-			max_length = 48
-		elif checkpoint_params["data"] == "cnndm":
-			min_length = 30
-			max_length = 130
-		else:
-			raise ValueError("Unrecognized data: <" + checkpoint_params["data"] + ">")
-
 		checkpoint_dir = _get_checkpoint_dir(
 			config,
 			checkpoint_params_str,
@@ -234,8 +226,8 @@ def get_config(experiment):
 			"output_file": os.path.join(checkpoint_dir, _get_predictions_filename(generate_params_str)),
 			"num_beams": 1,
 			"num_return_sequences": 1,
-			"min_length": min_length,
-			"max_num_tokens": max_length,
+			"min_length": 24,
+			"max_num_tokens": 48,
 			"top_k": -1,
 			"cache_dir": config["cache_dir"],
 			"include_input_data": True,
