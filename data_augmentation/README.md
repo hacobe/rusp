@@ -51,7 +51,7 @@ sbatch --partition=jsteinhardt -w balrog --gres=gpu:1 run.sh \
 		--m=gpt2 \
 		--p=refvsup+supvsup,gpt2vgpt2d0.2,\
 			refvgpt2,refvgpt2d0.2,\
-			refvmaskedrefprompt,refvshuffledprompt,\
+			refvgpt2maskedrefprompt,refvgpt2shuffledprompt,\
 			gpt2vgpt2d0.2+refvmaskedrefprompt \
 		--n=1k,5k,10k,20k,30k,40k)
 
