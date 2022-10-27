@@ -148,6 +148,34 @@ def add_dataset(
 				sents[index] += " ."
 
 			new_prompt = "MASKED: " + "\n".join(sents).strip() + "\nTL;DR:"
+		elif prompt_name == "maskedprompt" and dataset_name == "cnndm":
+			prompt_ids = np.array(tokenizer.encode(prompt.replace("\nTL;DR:", "")))
+
+			indices = np.arange(len(prompt_ids))
+			np.random.shuffle(indices)
+			n = len(indices) // 2
+			mask_indices = indices[:n]
+			prompt_ids[mask_indices] = tokenizer.cls_token_id
+
+			new_prompt = tokenizer.decode(list(prompt_ids))
+			new_prompt += "\nTL;DR:"
+
+			text = summary.strip()
+			summary_ids = tokenizer.encode(text)
+			if len(summary_ids) > 48:
+				continue
+
+			sents = text.split("\n")
+			
+			index = np.random.randint(0, len(sents))
+
+			add_period = sents[index].endswith(" .")
+
+			sents[index] = "[CLS]"
+			if add_period:
+				sents[index] += " ."
+
+			new_prompt += "\nMASKED: " + "\n".join(sents).strip() + "\nTL;DR:"
 		elif prompt_name == "shuffledprompt":
 			if "post" in example["example"]:
 				text = example["example"]["post"]
@@ -236,6 +264,41 @@ def main(args):
 		prompt_name="unmodifiedprompt",
 		tokenizer=tokenizer,
 		train_limit=40000)
+
+	if dataset_name == "cnndm":
+		prompts = set()
+		for prompt in prompt_to_summary_and_example:
+			prompts.add(prompt)
+		prompts_list = sorted(list(prompts))
+		n = len(prompts_list)
+		n_test = n // 2
+		test_prompts = set(prompts_list[:n_test])
+
+		add_dataset(
+			prompt_to_summary_and_example=prompt_to_summary_and_example,
+			dataset_map=dataset_map,
+			dataset_name=dataset_name,
+			prompt_name="maskedprompt",
+			tokenizer=tokenizer,
+			train_limit=20000,
+			test_limit=40000,
+			test_prompts=test_prompts)
+
+		add_dataset(
+			prompt_to_summary_and_example=prompt_to_summary_and_example,
+			dataset_map=dataset_map,
+			dataset_name=dataset_name,
+			prompt_name="maskedrefprompt",
+			tokenizer=tokenizer,
+			train_limit=20000,
+			test_limit=40000,
+			test_prompts=test_prompts)
+
+		for key in dataset_map:
+			output_file = os.path.join(config["data_dir"], key + ".jsonl")
+			utils.write_examples(dataset_map[key], output_file)
+
+		return
 
 	unmodified_prompt_to_summary_and_example = {}
 	test_prompts = set()

@@ -70,6 +70,7 @@ def _parse_params_str(params_str):
 			"refvsup+supvsup",
 			"unmodifiedprompt",
 			"maskedrefprompt",
+			"maskedprompt",
 			"shuffledprompt",
 			"gpt2vgpt2d0.2",
 			"refvgpt2d0.2",

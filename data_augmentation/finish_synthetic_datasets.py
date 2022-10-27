@@ -101,6 +101,8 @@ def main(args):
 			config, "refs_" + dataset_name + "_all_train_" + model, dataset_name + "_unmodifiedprompt_d0.2"),
 		model + "maskedrefprompt": get_predictions_file(
 			config, "refs_" + dataset_name + "_maskedrefprompt_train_" + model, dataset_name + "_maskedrefprompt_test"),
+		model + "maskedprompt": get_predictions_file(
+			config, "refs_" + dataset_name + "_maskedprompt_train_" + model, dataset_name + "_maskedprompt_test"),
 		model + "shuffledprompt": get_predictions_file(
 			config, "refs_" + dataset_name + "_all_train_" + model, dataset_name + "_shuffledprompt"),
 	}
@@ -113,6 +115,9 @@ def main(args):
 
 	input_file = os.path.join(config["data_dir"], "refs_" + dataset_name + "_unmodifiedprompt.jsonl")
 	policy_to_prompt_to_example["ref"] = get_prompt_to_ref_example(input_file)
+
+	if (model + "maskedprompt" in policy_to_input_file):
+		add_dataset(policy_to_prompt_to_example, "ref", model + "maskedprompt", dataset_name, dataset_map)
 
 	if (model in policy_to_input_file) and (model + "d0.2" in policy_to_input_file):
 		add_dataset(policy_to_prompt_to_example, model, model + "d0.2", dataset_name, dataset_map)
