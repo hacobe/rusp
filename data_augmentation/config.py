@@ -82,7 +82,8 @@ def _parse_params_str(params_str):
 			"gpt2vgpt2d0.2+refvgpt2maskedrefprompt",
 			"supvsup",
 			"gpt2-xlvgpt2-xld0.2",
-			"refvgpt2-xlmaskedrefprompt"):
+			"refvgpt2-xlmaskedrefprompt",
+			"refvgpt2-xlmaskedprompt"):
 			params["policy_comp"] = param_str
 		elif param_str[0] == "n" and param_str[1].isdigit():
 			num_str = "0"
