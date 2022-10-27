@@ -4,11 +4,12 @@ import datasets
 import jsonlines
 import os
 import numpy as np
+import transformers
 import tqdm
 import yaml
 
 
-def get_ref_examples(config):
+def get_ref_examples(config, tokenizer):
 	num_chars_per_token = 4
 	max_length = 512 * num_chars_per_token
 
@@ -31,6 +32,16 @@ def get_ref_examples(config):
 			example = {}
 			example["prompt"] = prompt
 			example["completion"] = " " + line["highlights"].strip() + "<|endoftext|>"
+
+			skip = False
+			if tokenizer:
+				num_tokens = len(tokenizer.encode(example["completion"]))
+				if num_tokens < 24 or num_tokens > 48:
+					skip = True
+
+			if skip:
+				continue
+
 			example["split"] = split
 			example["example"] = line
 			ref_examples.append(example)
@@ -99,7 +110,9 @@ if __name__ == "__main__":
 	with open("config.yaml", "r") as fin:
 		config = yaml.load(fin, Loader=yaml.FullLoader)
 
-	ref_examples = get_ref_examples(config)
+	tokenizer = transformers.GPT2Tokenizer.from_pretrained("gpt2", cache_dir=config["cache_dir"])
+
+	ref_examples = get_ref_examples(config, tokenizer)
 	comparison_examples = get_comparison_examples(config)
 
 	output_file = os.path.join(config["data_dir"], "comparisons_cnndm_all_test.jsonl")
