@@ -1,6 +1,6 @@
-# data_augmentation
+# data_synthesis
 
-Experiments related to data augmentation for language reward models for summarization.
+Experiments related to data synthesis for language reward models for summarization.
 
 ## TL;DR datasets
 

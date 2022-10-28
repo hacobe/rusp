@@ -1,5 +1,5 @@
 #!/bin/bash
-export CONFIG_DIR="/accounts/projects/jsteinhardt/$USER/src/rusp/data_augmentation"
+export CONFIG_DIR="/accounts/projects/jsteinhardt/$USER/src/rusp/data_synthesis"
 export LM_DIR="/accounts/projects/jsteinhardt/$USER/src/language_models"
 export CONDA_ENV_PREFIX="/scratch/users/$USER/conda/common"
 
