@@ -83,7 +83,20 @@ def _parse_params_str(params_str):
 			"supvsup",
 			"gpt2-xlvgpt2-xld0.2",
 			"refvgpt2-xlmaskedrefprompt",
-			"refvgpt2-xlmaskedprompt"):
+			"refvgpt2-xlmaskedprompt",
+			"refvgpt2-xl+gpt2-xlvgpt2-xl",
+			"pseudogpt2n1k",
+			"pseudogpt2n5k",
+			"pseudogpt2-xln1k",
+			"pseudogpt2-xln5k",
+			"pseudo10kgpt2-xln5k",
+			"pseudo20kgpt2-xln5k",
+			"pseudo30kgpt2-xln5k",
+			"pseudo40kgpt2-xln5k",
+			"round2pseudo20ktraingpt2-xl",
+			"round3pseudo20ktraingpt2-xl",
+			"round4pseudo20ktraingpt2-xl",
+			"round5pseudo20ktraingpt2-xl"):
 			params["policy_comp"] = param_str
 		elif param_str[0] == "n" and param_str[1].isdigit():
 			num_str = "0"
@@ -104,7 +117,7 @@ def _parse_params_str(params_str):
 				num = -1
 			else:
 				raise ValueError("Unrecognized suffix: <" + suffix + ">")
-			params["train_data_limit"] = num
+			params["limit"] = num
 		elif param_str[0] == "d" and param_str[1].isdigit():
 			params["dropout_prob"] = float(param_str[1:])
 		elif param_str[0] == "t" and param_str[1].isdigit():
@@ -135,7 +148,7 @@ def get_config(experiment):
 		finetune_params_str = params_str_parts[0]
 		finetune_params = _parse_params_str(finetune_params_str)
 
-		train_data_limit = finetune_params.get("train_data_limit", -1)
+		train_data_limit = finetune_params.get("limit", -1)
 		train_data_file = os.path.join(config["data_dir"], _get_data_filename(finetune_params))
 		output_dir = _get_model_dir(config, finetune_params_str)
 
@@ -234,7 +247,7 @@ def get_config(experiment):
 			"cache_dir": config["cache_dir"],
 			"include_input_data": True,
 			"exclude_input_keys": "",
-			"limit": -1,
+			"limit": generate_params.get("limit", -1),
 			"start": 0,
 			"temperature": generate_params.get("temperature", 1.0),
 			"dropout_prob": generate_params.get("dropout_prob", 0.0),
@@ -280,7 +293,8 @@ def get_config(experiment):
 				"evaluated_examples_file": os.path.join(checkpoint_dir,
 					filename.replace("comparisons_", "evaluated_examples_")),
 				"checkpoint_dir": checkpoint_dir,
-				"cache_dir": config["cache_dir"]
+				"cache_dir": config["cache_dir"],
+				"limit": evaluate_params.get("limit", None)
 			})
 			return cfg
 	else:
