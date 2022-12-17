@@ -9,13 +9,28 @@ import tqdm
 import yaml
 
 
-def get_ref_examples(config, tokenizer):
-	num_chars_per_token = 4
-	max_length = 512 * num_chars_per_token
+def _fmt(text):
+	prefix = "(CNN)"
+	start = text.find(prefix)
+	if start != -1:
+		for i in range(start + len(prefix), len(text)):
+			if text[i].isalpha():
+				start = i
+				break
+		text = text[start:]
+	text = text.replace("\n", " ").replace(" .", ".")
+	text = " ".join([word for word in text.split(" ") if word != ""])
+	text = text.replace("TL;DR:", "\nTL;DR:")
+	text = text.strip()
+	return text
 
+
+def get_ref_examples(config, tokenizer):
 	dataset = datasets.load_dataset("cnn_dailymail", "3.0.0", cache_dir=config["cache_dir"])
 
 	ref_examples = []
+	n_skipped_completion = 0
+	n_skipped_prompt_and_completion = 0
 	for key in dataset.keys():
 		if key == "validation":
 			split = "valid"
@@ -26,20 +41,18 @@ def get_ref_examples(config, tokenizer):
 		for i in tqdm.tqdm(range(len(dataset[key]))):
 			line = dataset[key][i]
 
-			article = line["article"]
-			prompt = article[:max_length].strip() + "\nTL;DR:"
+			prompt = line["article"].strip() + "\nTL;DR:"
 
 			example = {}
-			example["prompt"] = prompt
-			example["completion"] = " " + line["highlights"].strip() + "<|endoftext|>"
+			example["prompt"] = _fmt(prompt)
+			example["completion"] = " " + _fmt(line["highlights"]) + "<|endoftext|>"
 
-			skip = False
-			if tokenizer:
-				num_tokens = len(tokenizer.encode(example["completion"]))
-				if num_tokens < 24 or num_tokens > 48:
-					skip = True
+			if len(tokenizer.encode(example["prompt"] + example["completion"])) > 1024:
+				n_skipped_prompt_and_completion += 1
+				continue
 
-			if skip:
+			if len(tokenizer.encode(example["completion"])) > 48:
+				n_skipped_completion += 1
 				continue
 
 			example["split"] = split
@@ -48,13 +61,14 @@ def get_ref_examples(config, tokenizer):
 
 	np.random.shuffle(ref_examples)
 
+	print("n_skipped_prompt_and_completion: " + str(n_skipped_prompt_and_completion))
+	print("n_skipped_completion: " + str(n_skipped_completion))
+	print("len(ref_examples): " + str(len(ref_examples)))
+
 	return ref_examples
 
 
-def get_comparison_examples(config):
-	num_chars_per_token = 4
-	max_length = 512 * num_chars_per_token
-
+def get_comparison_examples(config, tokenizer):
 	input_dir = os.path.join(config["data_dir"], "comparisons/")
 
 	input_files = []
@@ -68,31 +82,48 @@ def get_comparison_examples(config):
 			continue
 		input_files.append(os.path.join(input_dir, fname))
 
+	n_skipped_prompt_and_completion = 0
+	n_skipped_completion = 0
 	comparison_examples = []
 	for input_file in input_files:
 		with jsonlines.open(input_file, "r") as fin:
 			for line in fin:
 				assert line["split"] == "valid2"
 
-				article = line["info"]["article"].strip()
-				prompt = article[:max_length].strip() + "\nTL;DR:"
+				prompt = line["info"]["article"].strip() + "\nTL;DR:"
 
 				example = {}
-				example["prompt"] = prompt
+				example["prompt"] = _fmt(prompt)
 				assert len(line["summaries"]) == 2
 				assert line["choice"] in set([0, 1])
 				# Note that we do not include "<|endoftext|>" here.
-				example["completion0"] = " " + line["summaries"][0]["text"].strip()
-				example["completion1"] = " " + line["summaries"][1]["text"].strip()
+				example["completion0"] = " " + _fmt(line["summaries"][0]["text"])
+				example["completion1"] = " " + _fmt(line["summaries"][1]["text"])
 				example["choice"] = line["choice"]
 				example["split"] = line["split"]
 				example["policy0"] = line["summaries"][0]["policy"]
 				example["policy1"] = line["summaries"][1]["policy"]
 				example["example"] = line
 
+				l0 = len(tokenizer.encode(example["prompt"] + example["completion0"]))
+				l1 = len(tokenizer.encode(example["prompt"] + example["completion1"]))
+				if l0 > 1024 or l1 > 1024:
+					n_skipped_prompt_and_completion += 1
+					continue
+
+				l0 = len(tokenizer.encode(example["completion0"]))
+				l1 = len(tokenizer.encode(example["completion1"]))
+				if l0 > 48 or l1 > 48:
+					n_skipped_completion += 1
+					continue
+
 				comparison_examples.append(example)
 
 	np.random.shuffle(comparison_examples)
+
+	print("n_skipped_prompt_and_completion: " + str(n_skipped_prompt_and_completion))
+	print("n_skipped_completion: " + str(n_skipped_completion))
+	print("len(comparison_examples): " + str(len(comparison_examples)))
 
 	return comparison_examples
 
@@ -113,7 +144,7 @@ if __name__ == "__main__":
 	tokenizer = transformers.GPT2Tokenizer.from_pretrained("gpt2", cache_dir=config["cache_dir"])
 
 	ref_examples = get_ref_examples(config, tokenizer)
-	comparison_examples = get_comparison_examples(config)
+	comparison_examples = get_comparison_examples(config, tokenizer)
 
 	output_file = os.path.join(config["data_dir"], "comparisons_cnndm_all_test.jsonl")
 	utils.write_examples(comparison_examples, output_file)
