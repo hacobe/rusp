@@ -9,7 +9,7 @@ import sklearn.metrics
 import tqdm
 
 
-def compute(examples, checkpoint_dir=None, cache_dir=None):
+def compute(examples, checkpoint_dir=None, cache_dir=None, limit=None):
 	tokenizer = transformers.GPT2Tokenizer.from_pretrained("gpt2", cache_dir=cache_dir)
 	tokenizer.pad_token = tokenizer.unk_token
 	tokenizer.add_special_tokens({"cls_token": "[CLS]"})
@@ -19,6 +19,10 @@ def compute(examples, checkpoint_dir=None, cache_dir=None):
 	model.cuda()
 
 	data_collator = lm.finetune._DataCollatorForMultipleChoice(tokenizer)
+
+	if limit is not None:
+		assert limit > 0
+		examples = examples[:limit]
 
 	for i in tqdm.tqdm(range(len(examples))):
 		example = examples[i]
