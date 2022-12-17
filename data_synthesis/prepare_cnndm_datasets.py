@@ -9,6 +9,9 @@ import tqdm
 import yaml
 
 
+_MAX_NUM_TOKENS = 48
+
+
 def _fmt(text):
 	prefix = "(CNN)"
 	start = text.find(prefix)
@@ -29,8 +32,8 @@ def get_ref_examples(config, tokenizer):
 	dataset = datasets.load_dataset("cnn_dailymail", "3.0.0", cache_dir=config["cache_dir"])
 
 	ref_examples = []
+	n_skipped_prompt = 0
 	n_skipped_completion = 0
-	n_skipped_prompt_and_completion = 0
 	for key in dataset.keys():
 		if key == "validation":
 			split = "valid"
@@ -47,11 +50,11 @@ def get_ref_examples(config, tokenizer):
 			example["prompt"] = _fmt(prompt)
 			example["completion"] = " " + _fmt(line["highlights"]) + "<|endoftext|>"
 
-			if len(tokenizer.encode(example["prompt"] + example["completion"])) > 1024:
-				n_skipped_prompt_and_completion += 1
+			if len(tokenizer.encode(example["prompt"])) + _MAX_NUM_TOKENS > tokenizer.model_max_length:
+				n_skipped_prompt += 1
 				continue
 
-			if len(tokenizer.encode(example["completion"])) > 48:
+			if len(tokenizer.encode(example["completion"])) > _MAX_NUM_TOKENS:
 				n_skipped_completion += 1
 				continue
 
@@ -61,7 +64,7 @@ def get_ref_examples(config, tokenizer):
 
 	np.random.shuffle(ref_examples)
 
-	print("n_skipped_prompt_and_completion: " + str(n_skipped_prompt_and_completion))
+	print("n_skipped_prompt: " + str(n_skipped_prompt))
 	print("n_skipped_completion: " + str(n_skipped_completion))
 	print("len(ref_examples): " + str(len(ref_examples)))
 
@@ -82,7 +85,7 @@ def get_comparison_examples(config, tokenizer):
 			continue
 		input_files.append(os.path.join(input_dir, fname))
 
-	n_skipped_prompt_and_completion = 0
+	n_skipped_prompt = 0
 	n_skipped_completion = 0
 	comparison_examples = []
 	for input_file in input_files:
@@ -105,15 +108,13 @@ def get_comparison_examples(config, tokenizer):
 				example["policy1"] = line["summaries"][1]["policy"]
 				example["example"] = line
 
-				l0 = len(tokenizer.encode(example["prompt"] + example["completion0"]))
-				l1 = len(tokenizer.encode(example["prompt"] + example["completion1"]))
-				if l0 > 1024 or l1 > 1024:
-					n_skipped_prompt_and_completion += 1
+				if len(tokenizer.encode(example["prompt"])) + _MAX_NUM_TOKENS > tokenizer.model_max_length:
+					n_skipped_prompt += 1
 					continue
 
 				l0 = len(tokenizer.encode(example["completion0"]))
 				l1 = len(tokenizer.encode(example["completion1"]))
-				if l0 > 48 or l1 > 48:
+				if l0 > _MAX_NUM_TOKENS or l1 > _MAX_NUM_TOKENS:
 					n_skipped_completion += 1
 					continue
 
@@ -121,7 +122,7 @@ def get_comparison_examples(config, tokenizer):
 
 	np.random.shuffle(comparison_examples)
 
-	print("n_skipped_prompt_and_completion: " + str(n_skipped_prompt_and_completion))
+	print("n_skipped_prompt: " + str(n_skipped_prompt))
 	print("n_skipped_completion: " + str(n_skipped_completion))
 	print("len(comparison_examples): " + str(len(comparison_examples)))
 
